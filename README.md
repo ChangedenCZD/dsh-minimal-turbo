@@ -83,22 +83,6 @@ Deepseek Harness 极简模式 Windows适配，享用满血Deepseek-V4系列模�
 - id: tool-pwsh
   name: '@deepseek-ai/dsh-tool-pwsh'
   disabled: !!js process.platform !== 'win32'
-
-- id: tool-goal
-  name: '@deepseek-ai/dsh-tool-goal'
-
-- id: tool-todo
-  name: '@deepseek-ai/dsh-tool-todo'
-  config:
-    allowParallelInProgress: true
-
-# The `web` service and its search provider stay in the host composition; only
-# the model-facing tool is per-session.
-- id: tool-web
-  name: '@deepseek-ai/dsh-tool-web'
-  config:
-    fetch: false
-    searchTimeoutMs: 60000
 ```
 
 ## 思考链效果
