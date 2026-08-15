@@ -4,6 +4,8 @@ Deepseek Harness 极简模式 Windows适配，享用满血Deepseek-V4系列模�
 1. 意在兼容Windows
 2. 一并强化了所有系统的极简模式流程，减少了思考轮次（因为有足够工具可以调用，不再啰嗦）
 
+由于是直接改的官方极简模式配置，因此不会干预整个Harness工作流程。
+
 ## 使用方式
 
 1. 进入nodejs包管理目录`node_modules`
