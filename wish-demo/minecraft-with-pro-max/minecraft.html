@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>WebCraft · 单文件我的世界</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #000; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- 开始 / 暂停菜单 ---------- */
+  #blocker {
+    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 14, 24, .78); backdrop-filter: blur(5px); color: #fff; transition: opacity .25s;
+  }
+  #blocker.hidden { display: none; }
+  .menu {
+    width: min(92vw, 560px); max-height: 92vh; overflow-y: auto; text-align: center;
+    background: rgba(20, 28, 40, .85); border: 2px solid rgba(255,255,255,.14);
+    border-radius: 16px; padding: 28px 26px; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  .menu h1 { font-size: 40px; letter-spacing: 2px; margin-bottom: 4px; }
+  .menu .sub { color: #a8c6e0; font-size: 14px; margin-bottom: 18px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; text-align: left;
+    font-size: 13px; color: #d9e6f2; margin: 0 auto 20px; width: fit-content;
+  }
+  .keys b { color: #ffd75e; font-weight: 600; display: inline-block; min-width: 88px; }
+  button.ctl-btn {
+    font: 600 17px/1 inherit; color: #1c2a14; background: linear-gradient(#9edb5a, #6bb43b);
+    border: 2px solid #3f7022; border-radius: 10px; padding: 12px 34px; cursor: pointer;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 4px 0 #3f7022; transition: transform .08s;
+  }
+  button.ctl-btn:hover { filter: brightness(1.06); }
+  button.ctl-btn:active { transform: translateY(3px); box-shadow: inset 0 2px 0 rgba(255,255,255,.4), 0 1px 0 #3f7022; }
+  button.ghost {
+    display: block; margin: 12px auto 0; background: none; border: 1px solid rgba(255,255,255,.3);
+    color: #cfdce8; font: 13px/1 inherit; padding: 8px 18px; border-radius: 8px; cursor: pointer;
+  }
+  button.ghost:hover { background: rgba(255,255,255,.08); }
+  .tiny { margin-top: 14px; font-size: 12px; color: #8fa7bd; }
+  .tiny.err { color: #ff7b6b; }
+
+  /* ---------- HUD ---------- */
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); z-index: 9; pointer-events: none; opacity: .85; mix-blend-mode: difference; }
+  #crosshair::before { content: ''; position: absolute; left: 2px; top: 10px; width: 18px; height: 2px; background: #fff; }
+  #crosshair::after { content: ''; position: absolute; left: 10px; top: 2px; width: 2px; height: 18px; background: #fff; }
+  #hotbar {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 4px; padding: 5px; background: rgba(8,10,14,.55); border-radius: 10px;
+  }
+  .slot {
+    width: 56px; height: 56px; border: 2px solid #4a4f58; border-radius: 6px; background: #20242a;
+    position: relative; cursor: pointer; transition: transform .08s;
+  }
+  .slot canvas { width: 46px; height: 46px; margin: 3px; image-rendering: pixelated; display: block; }
+  .slot .key { position: absolute; top: 1px; left: 5px; font: 700 10px/1 monospace; color: #fff; text-shadow: 1px 1px 0 #000; }
+  .slot.sel { border-color: #fff; box-shadow: 0 0 12px rgba(255,255,255,.75); transform: scale(1.08); z-index: 2; }
+  #info {
+    position: fixed; top: 8px; left: 10px; z-index: 10; pointer-events: none;
+    color: #fff; font: 12px/1.6 ui-monospace, Consolas, monospace; text-shadow: 1px 1px 0 #000;
+    background: rgba(0,0,0,.35); padding: 6px 9px; border-radius: 6px;
+  }
+  #toast {
+    position: fixed; top: 16%; left: 50%; transform: translateX(-50%); z-index: 40; pointer-events: none;
+    background: rgba(0,0,0,.7); color: #fff; font-size: 15px; padding: 9px 18px; border-radius: 8px;
+    opacity: 0; transition: opacity .3s;
+  }
+
+  /* ---------- 触屏控制 ---------- */
+  #touchUI { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+  #touchUI.hidden { display: none; }
+  #joy {
+    position: absolute; left: 20px; bottom: 20px; width: 134px; height: 134px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.4); background: rgba(255,255,255,.08);
+    pointer-events: auto; touch-action: none;
+  }
+  #joyThumb {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    border-radius: 50%; background: rgba(255,255,255,.4);
+  }
+  .tbtn {
+    position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.45); background: rgba(20,24,32,.55); color: #fff;
+    font-weight: 700; cursor: pointer; backdrop-filter: blur(2px);
+  }
+  .tbtn:active { background: rgba(255,255,255,.25); }
+  #btnJump { right: 22px; bottom: 22px; width: 82px; height: 82px; font-size: 16px; }
+  #btnBreak { right: 30px; bottom: 122px; width: 66px; height: 66px; font-size: 15px; }
+  #btnPlace { right: 30px; bottom: 198px; width: 66px; height: 66px; font-size: 15px; }
+  #btnFly { right: 108px; bottom: 122px; width: 58px; height: 58px; font-size: 13px; }
+  #btnDown { right: 30px; bottom: 274px; width: 58px; height: 58px; font-size: 13px; display: none; }
+  #btnPause { top: 12px; right: 12px; width: 48px; height: 48px; font-size: 18px; border-radius: 10px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="hotbar"></div>
+  <div id="info"></div>
+</div>
+<div id="toast"></div>
+
+<div id="blocker">
+  <div class="menu">
+    <h1>⛏️ WebCraft</h1>
+    <p class="sub">单文件 HTML 版《我的世界》</p>
+    <div class="keys">
+      <div><b>W A S D</b>移动</div>
+      <div><b>空格</b>跳跃 / 游泳</div>
+      <div><b>鼠标</b>转动视角</div>
+      <div><b>左键 / 右键</b>破坏 / 放置</div>
+      <div><b>1-9 / 滚轮</b>选择方块</div>
+      <div><b>Ctrl</b>疾跑 · <b>Shift</b>潜行</div>
+      <div><b>F</b>切换飞行</div>
+      <div><b>ESC</b>暂停</div>
+    </div>
+    <button id="btnPlay" class="ctl-btn">▶ 点击开始游戏</button>
+    <button id="btnNew" class="ghost">🌍 新建世界（随机种子）</button>
+    <p id="loadState" class="tiny">正在从 CDN 加载 3D 引擎…</p>
+  </div>
+</div>
+
+<div id="touchUI" class="hidden">
+  <div id="joy" class="ctl"><div id="joyThumb"></div></div>
+  <button id="btnBreak" class="tbtn ctl">⛏挖</button>
+  <button id="btnPlace" class="tbtn ctl">🧱放</button>
+  <button id="btnJump" class="tbtn ctl">⬆跳</button>
+  <button id="btnFly" class="tbtn ctl">✈飞</button>
+  <button id="btnDown" class="tbtn ctl">⬇降</button>
+  <button id="btnPause" class="tbtn ctl">⏸</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ================= 基础 ================= */
+  var canvas = document.getElementById('game');
+  var blocker = document.getElementById('blocker');
+  var btnPlay = document.getElementById('btnPlay');
+  var btnNew = document.getElementById('btnNew');
+  var loadState = document.getElementById('loadState');
+  var info = document.getElementById('info');
+  var toast = document.getElementById('toast');
+  var hotbarEl = document.getElementById('hotbar');
+  var touchUI = document.getElementById('touchUI');
+
+  if (typeof THREE === 'undefined') {
+    blocker.classList.remove('hidden');
+    loadState.textContent = '❌ 无法加载 Three.js（需要网络连接），请刷新重试。';
+    loadState.classList.add('err');
+    return;
+  }
+  loadState.textContent = '✅ 3D 引擎加载完成';
+
+  var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (isTouch) touchUI.classList.remove('hidden');
+
+  /* ================= 存档 ================= */
+  var SAVE_KEY = 'webcraft_save_v1';
+  var seed = Math.floor(Math.random() * 2147483647);
+  var editOverlays = new Map();   // "cx,cz" -> Uint8Array
+  var editedKeys = new Set();
+  var savedSlot = 0;
+  var savedPos = null;
+  var dirtySave = false;
+  var lastSave = 0;
+
+  try {
+    var raw = localStorage.getItem(SAVE_KEY);
+    if (raw) {
+      var s = JSON.parse(raw);
+      if (s && s.seed !== undefined) {
+        seed = s.seed | 0;
+        savedSlot = (s.slot | 0) || 0;
+        if (s.pos && s.pos.length === 3) savedPos = { x: s.pos[0], y: s.pos[1], z: s.pos[2] };
+        if (s.edits) {
+          Object.keys(s.edits).forEach(function (k) {
+            try {
+              var arr = decodeBlocks(s.edits[k]);
+              if (arr.length === 24576) editOverlays.set(k, arr);
+            } catch (e) {}
+          });
+        }
+      }
+    }
+  } catch (e) {}
+
+  function encodeBlocks(arr) {
+    var bin = '';
+    for (var i = 0; i < arr.length; i += 8192) {
+      bin += String.fromCharCode.apply(null, arr.subarray(i, i + 8192));
+    }
+    return btoa(bin);
+  }
+  function decodeBlocks(b64) {
+    var bin = atob(b64);
+    var a = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return a;
+  }
+  function saveGame() {
+    try {
+      var edits = {};
+      editedKeys.forEach(function (k) {
+        var ov = editOverlays.get(k);
+        if (ov) edits[k] = encodeBlocks(ov);
+      });
+      var data = {
+        version: 1, seed: seed, slot: slotIndex,
+        pos: [player.pos.x, player.pos.y, player.pos.z],
+        edits: edits
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      dirtySave = false;
+    } catch (e) { /* 存储满或被禁用时静默失败 */ }
+  }
+
+  /* ================= 常量 ================= */
+  var CS = 16;          // 区块边长
+  var CH = 96;          // 世界高度
+  var SEA = 18;         // 海平面
+  var SNOW_LINE = 40;   // 雪线
+
+  var AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, PLANKS = 4, LOG = 5, LEAVES = 6,
+      SAND = 7, GLASS = 8, BRICK = 9, WATER = 10, SNOW = 11, BEDROCK = 12;
+
+  var BLOCK_NAMES = [];
+  BLOCK_NAMES[GRASS] = '草方块'; BLOCK_NAMES[DIRT] = '泥土'; BLOCK_NAMES[STONE] = '石头';
+  BLOCK_NAMES[PLANKS] = '木板'; BLOCK_NAMES[LOG] = '原木'; BLOCK_NAMES[LEAVES] = '树叶';
+  BLOCK_NAMES[SAND] = '沙子'; BLOCK_NAMES[GLASS] = '玻璃'; BLOCK_NAMES[BRICK] = '砖块';
+  BLOCK_NAMES[WATER] = '水'; BLOCK_NAMES[SNOW] = '雪块'; BLOCK_NAMES[BEDROCK] = '基岩';
+
+  var HOTBAR = [GRASS, DIRT, STONE, PLANKS, LOG, LEAVES, SAND, GLASS, WATER];
+  var slotIndex = Math.min(savedSlot, HOTBAR.length - 1);
+
+  var BLOCK_COLORS = [];
+  BLOCK_COLORS[GRASS] = 0x62b23e; BLOCK_COLORS[DIRT] = 0x8a5a33; BLOCK_COLORS[STONE] = 0x8f8f8f;
+  BLOCK_COLORS[PLANKS] = 0xb08a4f; BLOCK_COLORS[LOG] = 0x7a5830; BLOCK_COLORS[LEAVES] = 0x3f8c2a;
+  BLOCK_COLORS[SAND] = 0xe4d68a; BLOCK_COLORS[GLASS] = 0xcfe8f7; BLOCK_COLORS[BRICK] = 0x9c4a30;
+  BLOCK_COLORS[WATER] = 0x2f5fd0; BLOCK_COLORS[SNOW] = 0xeef6fb; BLOCK_COLORS[BEDROCK] = 0x4a4a4a;
+
+  var BLOCK_TILES = [];
+  BLOCK_TILES[GRASS] = 'grass_side'; BLOCK_TILES[DIRT] = 'dirt'; BLOCK_TILES[STONE] = 'stone';
+  BLOCK_TILES[PLANKS] = 'planks'; BLOCK_TILES[LOG] = 'log_side'; BLOCK_TILES[LEAVES] = 'leaves';
+  BLOCK_TILES[SAND] = 'sand'; BLOCK_TILES[GLASS] = 'glass'; BLOCK_TILES[BRICK] = 'brick';
+  BLOCK_TILES[WATER] = 'water'; BLOCK_TILES[SNOW] = 'snow'; BLOCK_TILES[BEDROCK] = 'bedrock';
+
+  /* ================= 噪声 ================= */
+  function hash2(x, z) {
+    var h = Math.imul(x | 0, 374761393) + Math.imul(z | 0, 668265263) + Math.imul(seed | 0, 1442695041) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h = (h ^ (h >>> 16)) >>> 0;
+    return h / 4294967296;
+  }
+  function hash3(x, y, z) {
+    var h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(z | 0, 1274126177) + Math.imul(seed | 0, 2246822519) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h = (h ^ (h >>> 16)) >>> 0;
+    return h / 4294967296;
+  }
+  function valueNoise2(x, z) {
+    var xi = Math.floor(x), zi = Math.floor(z);
+    var tx = x - xi, tz = z - zi;
+    var sx = tx * tx * (3 - 2 * tx), sz = tz * tz * (3 - 2 * tz);
+    var a = hash2(xi, zi), b = hash2(xi + 1, zi), c = hash2(xi, zi + 1), d = hash2(xi + 1, zi + 1);
+    return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sz;
+  }
+  function valueNoise3(x, y, z) {
+    var xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    var tx = x - xi, ty = y - yi, tz = z - zi;
+    var sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty), sz = tz * tz * (3 - 2 * tz);
+    var n000 = hash3(xi, yi, zi), n100 = hash3(xi + 1, yi, zi);
+    var n010 = hash3(xi, yi + 1, zi), n110 = hash3(xi + 1, yi + 1, zi);
+    var n001 = hash3(xi, yi, zi + 1), n101 = hash3(xi + 1, yi, zi + 1);
+    var n011 = hash3(xi, yi + 1, zi + 1), n111 = hash3(xi + 1, yi + 1, zi + 1);
+    var nx00 = n000 + (n100 - n000) * sx, nx10 = n010 + (n110 - n010) * sx;
+    var nx01 = n001 + (n101 - n001) * sx, nx11 = n011 + (n111 - n011) * sx;
+    var nxy0 = nx00 + (nx10 - nx00) * sy, nxy1 = nx01 + (nx11 - nx01) * sy;
+    return nxy0 + (nxy1 - nxy0) * sz;
+  }
+  function fbm2(x, z, oct) {
+    var sum = 0, amp = 0.5, freq = 1, norm = 0;
+    for (var o = 0; o < oct; o++) {
+      sum += amp * valueNoise2(x * freq + o * 37.17, z * freq + o * 17.31);
+      norm += amp; amp *= 0.5; freq *= 2;
+    }
+    return sum / norm;
+  }
+  function fbm3(x, y, z, oct) {
+    var sum = 0, amp = 0.5, freq = 1, norm = 0;
+    for (var o = 0; o < oct; o++) {
+      sum += amp * valueNoise3(x * freq + o * 13.7, y * freq + o * 29.3, z * freq + o * 7.9);
+      norm += amp; amp *= 0.5; freq *= 2;
+    }
+    return sum / norm;
+  }
+
+  /* ================= 地形生成 ================= */
+  function terrainHeight(wx, wz) {
+    var plains = fbm2(wx * 0.012, wz * 0.012, 4);
+    var m = fbm2(wx * 0.0032 + 4000, wz * 0.0032 + 4000, 4);
+    var ridge = Math.pow(Math.max(0, m - 0.38) * 1.6, 2.1);
+    var h = Math.floor(12 + plains * 20 + ridge * 40);
+    return Math.min(h, CH - 26);
+  }
+  function isDesert(wx, wz, h) {
+    if (h > 30) return false;
+    return fbm2(wx * 0.004 + 9000, wz * 0.004 + 9000, 3) > 0.62;
+  }
+  function caveAt(wx, y, wz) {
+    return fbm3(wx * 0.085, y * 0.11, wz * 0.085, 2) > 0.62;
+  }
+  function wantsTree(wx, wz, h, desert, snowy) {
+    var lx = ((wx % CS) + CS) % CS, lz = ((wz % CS) + CS) % CS;
+    if (lx < 2 || lx > 13 || lz < 2 || lz > 13) return false;
+    if (h === undefined) h = terrainHeight(wx, wz);
+    if (desert === undefined) desert = isDesert(wx, wz, h);
+    if (snowy === undefined) snowy = h >= SNOW_LINE;
+    if (h <= SEA + 1 || h > 44 || desert || snowy) return false;
+    return hash2(wx + 0x1234567, wz + 0x7654321) < 0.008;
+  }
+
+  function placeTree(b, lx, lz, h, wx, wz) {
+    var trunkH = 4 + Math.floor(hash2(wx + 77777, wz + 33333) * 3);
+    function set(dx, dy, dz, id) {
+      var xx = lx + dx, zz = lz + dz, yy = h + dy;
+      if (xx < 0 || xx >= CS || zz < 0 || zz >= CS || yy < 1 || yy >= CH) return;
+      var i = (yy * CS + zz) * CS + xx;
+      if (id === LEAVES && b[i] !== AIR) return;
+      b[i] = id;
+    }
+    for (var dy = 1; dy <= trunkH; dy++) set(0, dy, 0, LOG);
+    for (dy = trunkH - 2; dy <= trunkH + 1; dy++) {
+      var rad = dy === trunkH + 1 ? 1 : 2;
+      for (var dx = -rad; dx <= rad; dx++) {
+        for (var dz = -rad; dz <= rad; dz++) {
+          if (dx === 0 && dz === 0 && dy <= trunkH) continue;
+          if (Math.abs(dx) === rad && Math.abs(dz) === rad &&
+              hash2(wx + dx * 31 + 99, wz + dz * 31 + 77) < 0.5) continue;
+          set(dx, dy, dz, LEAVES);
+        }
+      }
+    }
+  }
+
+  function generateChunk(c, cx, cz) {
+    var b = c.blocks;
+    for (var z = 0; z < CS; z++) {
+      for (var x = 0; x < CS; x++) {
+        var wx = cx * CS + x, wz = cz * CS + z;
+        var h = terrainHeight(wx, wz);
+        var desert = isDesert(wx, wz, h);
+        var sandy = desert || h <= SEA + 1;
+        var snowy = h >= SNOW_LINE;
+        var topId = snowy ? SNOW : (sandy ? SAND : GRASS);
+        for (var y = 0; y <= h; y++) {
+          var id;
+          if (y === 0) id = BEDROCK;
+          else if (y === h) id = topId;
+          else if (sandy && y >= h - 2) id = SAND;
+          else if (y >= h - 3) id = DIRT;
+          else if (y >= 2 && caveAt(wx, y, wz)) id = AIR;
+          else id = STONE;
+          b[(y * CS + z) * CS + x] = id;
+        }
+        if (h < SEA) {
+          for (y = h + 1; y <= SEA; y++) b[(y * CS + z) * CS + x] = WATER;
+        }
+        if (wantsTree(wx, wz, h, desert, snowy)) placeTree(b, x, z, h, wx, wz);
+      }
+    }
+  }
+
+  /* ================= 世界 / 区块 ================= */
+  var chunks = new Map();      // key -> chunk
+  var buildQueue = [];
+
+  function loadChunk(cx, cz) {
+    var key = cx + ',' + cz;
+    var c = chunks.get(key);
+    if (c) return c;
+    c = {
+      key: key, cx: cx, cz: cz,
+      blocks: new Uint8Array(CS * CS * CH),
+      group: null, meshed: false, queued: false, edited: false
+    };
+    chunks.set(key, c);
+    generateChunk(c, cx, cz);
+    var ov = editOverlays.get(key);
+    if (ov) c.blocks.set(ov);
+    return c;
+  }
+
+  function getBlock(wx, wy, wz) {
+    if (wy < 0) return BEDROCK;
+    if (wy >= CH) return AIR;
+    var cx = Math.floor(wx / CS), cz = Math.floor(wz / CS);
+    var c = loadChunk(cx, cz);
+    var x = wx - cx * CS, z = wz - cz * CS;
+    return c.blocks[(wy * CS + z) * CS + x];
+  }
+  function isOpaque(id) { return id !== AIR && id !== WATER && id !== GLASS; }
+
+  function commitEdit(c) {
+    c.edited = true;
+    editedKeys.add(c.key);
+    editOverlays.set(c.key, Uint8Array.from(c.blocks));
+    dirtySave = true;
+  }
+
+  function setBlockWorld(wx, wy, wz, id) {
+    if (wy < 0 || wy >= CH) return false;
+    var cx = Math.floor(wx / CS), cz = Math.floor(wz / CS);
+    var c = loadChunk(cx, cz);
+    var x = wx - cx * CS, z = wz - cz * CS;
+    var i = (wy * CS + z) * CS + x;
+    if (c.blocks[i] === id) return false;
+    c.blocks[i] = id;
+    commitEdit(c);
+    rebuildChunk(cx, cz);
+    if (x === 0) rebuildChunk(cx - 1, cz);
+    if (x === CS - 1) rebuildChunk(cx + 1, cz);
+    if (z === 0) rebuildChunk(cx, cz - 1);
+    if (z === CS - 1) rebuildChunk(cx, cz + 1);
+    return true;
+  }
+
+  function rebuildChunk(cx, cz) {
+    var c = chunks.get(cx + ',' + cz);
+    if (!c || c.queued) return;
+    try { buildChunkMeshes(c); } catch (e) { console.error(e); }
+  }
+
+  function enqueue(c) {
+    if (c && !c.meshed && !c.queued) { c.queued = true; buildQueue.push(c); }
+  }
+
+  function ensureChunksAround() {
+    var pcx = Math.floor(player.pos.x / CS), pcz = Math.floor(player.pos.z / CS);
+    var added = 0;
+    for (var r = 0; r <= RD && added < 6; r++) {
+      for (var dz = -r; dz <= r; dz++) {
+        for (var dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          var cx = pcx + dx, cz = pcz + dz, key = cx + ',' + cz;
+          if (!chunks.has(key)) {
+            if (added >= 6) return;
+            enqueue(loadChunk(cx, cz));
+            added++;
+          } else {
+            var c = chunks.get(key);
+            if (!c.meshed && !c.queued) enqueue(c);
+          }
+        }
+      }
+    }
+  }
+
+  function unloadFar() {
+    var pcx = Math.floor(player.pos.x / CS), pcz = Math.floor(player.pos.z / CS);
+    var limit = RD + 3;
+    chunks.forEach(function (c, key) {
+      var d = Math.max(Math.abs(c.cx - pcx), Math.abs(c.cz - pcz));
+      if (d > limit) {
+        buildQueue = buildQueue.filter(function (q) { return q !== c; });
+        removeChunkMeshes(c);
+        chunks.delete(key);
+      }
+    });
+  }
+
+  /* ================= 纹理图集 ================= */
+  var TS = 32, ATLAS_W = 256, ATLAS_H = 64;
+  var TILE_ORDER = ['grass_top', 'grass_side', 'dirt', 'stone', 'planks', 'log_side', 'log_top', 'leaves',
+                    'sand', 'water', 'glass', 'brick', 'snow', 'bedrock'];
+  var TILES = {};
+  TILE_ORDER.forEach(function (name, i) { TILES[name] = [i % 8, Math.floor(i / 8)]; });
+
+  var atlasCanvas = document.createElement('canvas');
+  atlasCanvas.width = ATLAS_W; atlasCanvas.height = ATLAS_H;
+  var actx = atlasCanvas.getContext('2d');
+
+  function noiseTile(ctx, x, y, base, specks) {
+    ctx.fillStyle = base;
+    ctx.fillRect(x, y, TS, TS);
+    for (var i = 0; i < 200; i++) {
+      ctx.fillStyle = specks[Math.floor(Math.random() * specks.length)];
+      ctx.fillRect(x + Math.floor(Math.random() * TS), y + Math.floor(Math.random() * TS), 1, 1);
+    }
+  }
+  function drawTile(name, ctx, x, y) {
+    var px, py, r;
+    switch (name) {
+      case 'grass_top':
+        noiseTile(ctx, x, y, '#6fbe3c', ['#5da831', '#7fd34d', '#4e9b28']);
+        break;
+      case 'grass_side':
+        noiseTile(ctx, x, y, '#8a5a33', ['#7a4f2c', '#9a6a3d', '#6f4527']);
+        ctx.fillStyle = '#6dbf3a';
+        for (px = 0; px < TS; px++) {
+          var d = 3 + Math.floor(Math.random() * 4);
+          ctx.fillRect(x + px, y, 1, d);
+        }
+        ctx.fillStyle = '#4e8f2a';
+        for (px = 0; px < TS; px++) {
+          var e = 2 + Math.floor(Math.random() * 5);
+          ctx.fillRect(x + px, y + e, 1, 1);
+        }
+        break;
+      case 'dirt': noiseTile(ctx, x, y, '#8a5a33', ['#7a4f2c', '#9a6a3d', '#6f4527', '#a07443']); break;
+      case 'stone': noiseTile(ctx, x, y, '#8f8f8f', ['#7a7a7a', '#a0a0a0', '#6e6e6e', '#999']); break;
+      case 'sand': noiseTile(ctx, x, y, '#e4d68a', ['#d3c477', '#f0e3a2', '#c9b968']); break;
+      case 'snow': noiseTile(ctx, x, y, '#eef6fb', ['#dfeaf2', '#ffffff', '#dbe7f0']); break;
+      case 'bedrock': noiseTile(ctx, x, y, '#4a4a4a', ['#303030', '#606060', '#222', '#757575']); break;
+      case 'planks':
+        ctx.fillStyle = '#b08a4f'; ctx.fillRect(x, y, TS, TS);
+        ctx.fillStyle = '#c49a5e';
+        for (py = 0; py < TS; py += 2) if ((py >> 2) % 2 === 0) ctx.fillRect(x, y + py, TS, 1);
+        ctx.fillStyle = '#8a6a3a';
+        for (py = 7; py < TS; py += 8) ctx.fillRect(x, y + py, TS, 1);
+        ctx.fillRect(x + 15, y, 1, TS);
+        for (var n = 0; n < 12; n++) {
+          ctx.fillStyle = '#7a5c32';
+          ctx.fillRect(x + 2 + Math.floor(Math.random() * 13), y + 2 + Math.floor(Math.random() * 28), 1, 1);
+          ctx.fillRect(x + 18 + Math.floor(Math.random() * 13), y + 2 + Math.floor(Math.random() * 28), 1, 1);
+        }
+        break;
+      case 'log_side':
+        ctx.fillStyle = '#6e4d26'; ctx.fillRect(x, y, TS, TS);
+        for (px = 0; px < TS; px++) {
+          var v = 0.75 + 0.3 * hash2(px * 131 + 7, 0x5f5f) * 0.4;
+          ctx.fillStyle = 'rgb(' + Math.floor(140 * v) + ',' + Math.floor(96 * v) + ',' + Math.floor(54 * v) + ')';
+          ctx.fillRect(x + px, y, 1, TS);
+        }
+        ctx.fillStyle = '#4e3518';
+        for (px = 3; px < TS; px += 7) ctx.fillRect(x + px, y, 1, TS);
+        break;
+      case 'log_top':
+        ctx.fillStyle = '#6e4d26'; ctx.fillRect(x, y, TS, TS);
+        ctx.strokeStyle = '#a77b45'; ctx.lineWidth = 2;
+        for (r = 4; r <= 14; r += 3) ctx.strokeRect(x + r + 0.5, y + r + 0.5, TS - 2 * r, TS - 2 * r);
+        ctx.fillStyle = '#a77b45'; ctx.fillRect(x + 12, y + 12, 8, 8);
+        break;
+      case 'leaves':
+        noiseTile(ctx, x, y, '#3f8c2a', ['#347a22', '#4da035', '#2c6b1d', '#58ad3c', '#275f1a']);
+        break;
+      case 'water':
+        noiseTile(ctx, x, y, '#2f5fd0', ['#3a6be0', '#284fae', '#4f7de0', '#3567d8']);
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        for (py = 4; py < TS; py += 9) ctx.fillRect(x + 2 + Math.floor(Math.random() * 8), y + py, 10 + Math.floor(Math.random() * 14), 1);
+        break;
+      case 'glass':
+        ctx.clearRect(x, y, TS, TS);
+        ctx.strokeStyle = 'rgba(220,240,250,0.95)'; ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, TS - 2, TS - 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + 16, y + 16);
+        ctx.moveTo(x + 20, y + 6); ctx.lineTo(x + 10, y + 16); ctx.stroke();
+        break;
+      case 'brick':
+        ctx.fillStyle = '#c8b8a0'; ctx.fillRect(x, y, TS, TS);
+        ctx.fillStyle = '#9c4a30';
+        for (var row = 0; row < 4; row++) {
+          var off = (row % 2) * 8;
+          for (var bx = off - 16; bx < TS; bx += 16) {
+            ctx.fillRect(x + bx + 1, y + row * 8 + 1, 14, 6);
+          }
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        for (var s = 0; s < 26; s++) ctx.fillRect(x + Math.floor(Math.random() * TS), y + Math.floor(Math.random() * TS), 1, 1);
+        break;
+    }
+  }
+
+  TILE_ORDER.forEach(function (name, i) {
+    drawTile(name, actx, (i % 8) * TS, Math.floor(i / 8) * TS);
+  });
+
+  /* ================= Three.js 场景 ================= */
+  var RD = isTouch ? 3 : 5;   // 渲染距离（区块）
+  var SKY = 0x87c8f0;
+
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance' });
+  } catch (e) {
+    loadState.textContent = '❌ 无法初始化 WebGL，请更换现代浏览器。';
+    loadState.classList.add('err');
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, RD * CS * 0.45, RD * CS * 1.3);
+
+  var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.rotation.order = 'YXZ';
+
+  var hemi = new THREE.HemisphereLight(0xcfe8ff, 0x9a8a6a, 0.75);
+  var sunLight = new THREE.DirectionalLight(0xffffff, 0.85);
+  sunLight.position.set(120, 180, 60);
+  scene.add(hemi); scene.add(sunLight);
+
+  var atlasTex = new THREE.CanvasTexture(atlasCanvas);
+  atlasTex.magFilter = THREE.NearestFilter;
+  atlasTex.minFilter = THREE.NearestFilter;
+  atlasTex.generateMipmaps = false;
+  atlasTex.flipY = false;   // UV v=0 对应图片第一行
+
+  var blockMat = new THREE.MeshLambertMaterial({ map: atlasTex, vertexColors: true });
+  var waterMat = new THREE.MeshLambertMaterial({ map: atlasTex, vertexColors: true, transparent: true, opacity: 0.72, side: THREE.DoubleSide, depthWrite: true });
+  var glassMat = new THREE.MeshLambertMaterial({ map: atlasTex, vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false });
+
+  // 云
+  var cloudTex = (function () {
+    var cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    var c = cv.getContext('2d');
+    var wraps = [[0,0],[256,0],[-256,0],[0,256],[0,-256],[256,256],[-256,256],[256,-256],[-256,-256]];
+    for (var i = 0; i < 60; i++) {
+      var cx0 = Math.random() * 256, cy0 = Math.random() * 256, rad = 14 + Math.random() * 30;
+      c.fillStyle = 'rgba(255,255,255,' + (0.07 + Math.random() * 0.13) + ')';
+      for (var w = 0; w < wraps.length; w++) {
+        c.beginPath(); c.arc(cx0 + wraps[w][0], cy0 + wraps[w][1], rad, 0, Math.PI * 2); c.fill();
+      }
+    }
+    var t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(2, 2);
+    return t;
+  })();
+  var cloudGroup = new THREE.Group();
+  for (var ci = 0; ci < 3; ci++) {
+    var cm = new THREE.Mesh(
+      new THREE.PlaneGeometry(420, 420),
+      new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.62, depthWrite: false, side: THREE.DoubleSide, fog: false })
+    );
+    cm.rotation.x = -Math.PI / 2;
+    cm.position.set(0, CH - 6, 0);
+    cm.renderOrder = 1;
+    cloudGroup.add(cm);
+  }
+  scene.add(cloudGroup);
+
+  // 太阳
+  var sunDir = new THREE.Vector3(0.5, 0.62, 0.25).normalize();
+  var sunMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(26, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfff7d0, fog: false })
+  );
+  scene.add(sunMesh);
+
+  // 准星高亮
+  var highlight = new THREE.Group();
+  var hlBox = new THREE.BoxGeometry(1.002, 1.002, 1.002);
+  highlight.add(new THREE.Mesh(hlBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false })));
+  highlight.add(new THREE.LineSegments(new THREE.EdgesGeometry(hlBox), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 })));
+  highlight.visible = false;
+  scene.add(highlight);
+
+  // 破坏粒子
+  var partGeo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+  var particles = [];
+
+  /* ================= 面表 ================= */
+  var FACES = [
+    { n: [1, 0, 0],  p: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], uv: [[0,1],[0,0],[1,0],[1,1]], shade: 0.8 },
+    { n: [-1,0, 0], p: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], uv: [[0,1],[1,1],[1,0],[0,0]], shade: 0.8 },
+    { n: [0, 1, 0], p: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], uv: [[0,0],[0,1],[1,1],[1,0]], shade: 1.0 },
+    { n: [0,-1, 0], p: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], uv: [[0,0],[1,0],[1,1],[0,1]], shade: 0.5 },
+    { n: [0, 0, 1], p: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], uv: [[0,1],[1,1],[1,0],[0,0]], shade: 0.65 },
+    { n: [0, 0,-1], p: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], uv: [[0,1],[1,1],[1,0],[0,0]], shade: 0.65 }
+  ];
+
+  function addFace(t, x, y, z, fi, tile, shade, yOff) {
+    var f = FACES[fi], tc = TILES[tile];
+    var u0 = tc[0] * TS, v0 = tc[1] * TS;
+    var base = t.pos.length / 3;
+    for (var i = 0; i < 4; i++) {
+      t.pos.push(x + f.p[i][0], y + f.p[i][1] + (fi === 2 ? yOff : 0), z + f.p[i][2]);
+      t.nor.push(f.n[0], f.n[1], f.n[2]);
+      t.uv.push((u0 + f.uv[i][0] * TS) / ATLAS_W, (v0 + f.uv[i][1] * TS) / ATLAS_H);
+      t.col.push(shade, shade, shade);
+    }
+    t.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+
+  function getTileForFace(id, fi) {
+    if (id === GRASS) return fi === 2 ? 'grass_top' : (fi === 3 ? 'dirt' : 'grass_side');
+    if (id === LOG) return (fi === 2 || fi === 3) ? 'log_top' : 'log_side';
+    return BLOCK_TILES[id] || 'stone';
+  }
+
+  function finalizeGeometry(t) {
+    if (!t.pos.length) return null;
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(t.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(t.nor, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(t.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(t.col, 3));
+    g.setIndex(t.idx);
+    return g;
+  }
+
+  function removeChunkMeshes(c) {
+    if (c.group) {
+      scene.remove(c.group);
+      c.group.traverse(function (o) { if (o.geometry) o.geometry.dispose(); });
+      c.group = null;
+    }
+    c.meshed = false;
+  }
+
+  function buildChunkMeshes(c) {
+    removeChunkMeshes(c);
+    var opaque = { pos: [], nor: [], uv: [], col: [], idx: [] };
+    var water = { pos: [], nor: [], uv: [], col: [], idx: [] };
+    var glass = { pos: [], nor: [], uv: [], col: [], idx: [] };
+    var b = c.blocks, bx = c.cx * CS, bz = c.cz * CS;
+
+    for (var y = 0; y < CH; y++) {
+      for (var z = 0; z < CS; z++) {
+        for (var x = 0; x < CS; x++) {
+          var id = b[(y * CS + z) * CS + x];
+          if (id === AIR) continue;
+          var wx = bx + x, wy = y, wz = bz + z;
+
+          if (id === WATER) {
+            var above = getBlock(wx, wy + 1, wz);
+            if (above !== WATER && !isOpaque(above)) addFace(water, x, y, z, 2, 'water', 0.95, 0.875);
+            for (var fi = 0; fi < 6; fi++) {
+              if (fi === 2 || fi === 3) continue;
+              var f = FACES[fi];
+              var nb = getBlock(wx + f.n[0], wy + f.n[1], wz + f.n[2]);
+              if (nb !== WATER && !isOpaque(nb)) addFace(water, x, y, z, fi, 'water', 0.95, 0);
+            }
+            continue;
+          }
+
+          var target = id === GLASS ? glass : opaque;
+          for (fi = 0; fi < 6; fi++) {
+            f = FACES[fi];
+            nb = getBlock(wx + f.n[0], wy + f.n[1], wz + f.n[2]);
+            if (id === GLASS) { if (nb === GLASS || isOpaque(nb)) continue; }
+            else { if (isOpaque(nb)) continue; }
+            addFace(target, x, y, z, fi, getTileForFace(id, fi), f.shade, 0);
+          }
+        }
+      }
+    }
+
+    var group = new THREE.Group();
+    var g;
+    if ((g = finalizeGeometry(opaque))) group.add(new THREE.Mesh(g, blockMat));
+    if ((g = finalizeGeometry(water))) group.add(new THREE.Mesh(g, waterMat));
+    if ((g = finalizeGeometry(glass))) group.add(new THREE.Mesh(g, glassMat));
+    group.position.set(c.cx * CS, 0, c.cz * CS);
+    scene.add(group);
+    c.group = group;
+    c.meshed = true;
+  }
+
+  function processBuildQueue(maxMs) {
+    var pcx = Math.floor(player.pos.x / CS), pcz = Math.floor(player.pos.z / CS);
+    buildQueue.sort(function (a, b) {
+      var da = (a.cx - pcx) * (a.cx - pcx) + (a.cz - pcz) * (a.cz - pcz);
+      var db = (b.cx - pcx) * (b.cx - pcx) + (b.cz - pcz) * (b.cz - pcz);
+      return da - db;
+    });
+    var start = performance.now();
+    while (buildQueue.length && performance.now() - start < maxMs) {
+      var c = buildQueue.shift();
+      if (!c.queued) continue;
+      c.queued = false;
+      if (chunks.get(c.key) !== c) continue;
+      try { buildChunkMeshes(c); } catch (e) { console.error(e); }
+    }
+  }
+
+  /* ================= 玩家物理 ================= */
+  var PLAYER_R = 0.3, PLAYER_H = 1.8, EYE = 1.62;
+  var UP = new THREE.Vector3(0, 1, 0);
+  var tmpDir = new THREE.Vector3(), tmpRight = new THREE.Vector3(), tmpMove = new THREE.Vector3();
+
+  var player = { pos: new THREE.Vector3(8.5, 40, 8.5), vel: new THREE.Vector3() };
+  var yaw = 0, pitch = -0.15;
+  var flying = false, onGround = false, inWater = false;
+  var bobPhase = 0;
+
+  function findSpawn() {
+    // 从世界原点向外螺旋搜索干燥地面，最多约 2000 格
+    for (var r = 0; r <= 520; r += 4) {
+      var pts = Math.max(8, r * 2);
+      for (var a = 0; a < pts; a++) {
+        var ang = (a / pts) * Math.PI * 2;
+        var dx = Math.round(Math.cos(ang) * r), dz = Math.round(Math.sin(ang) * r);
+        var wx = 8 + dx, wz = 8 + dz;
+        var h = terrainHeight(wx, wz);
+        if (h >= SEA + 2 && h <= 60 && !wantsTree(wx, wz, h)) {
+          return { x: wx + 0.5, y: h + 1.001, z: wz + 0.5 };
+        }
+      }
+    }
+    var h0 = terrainHeight(8, 8);
+    return { x: 8.5, y: h0 + 1.001, z: 8.5 };
+  }
+
+  function blockAt(x, y, z) { return getBlock(Math.floor(x), Math.floor(y), Math.floor(z)); }
+  function isWaterAt(x, y, z) { return blockAt(x, y, z) === WATER; }
+  function isSolidAt(x, y, z) {
+    var id = blockAt(x, y, z);
+    return id !== AIR && id !== WATER;
+  }
+
+  function collideX(dx) {
+    if (!dx) return;
+    posAxis(0, dx);
+    var r = PLAYER_R;
+    var bx = dx > 0 ? Math.floor(player.pos.x + r) : Math.floor(player.pos.x - r);
+    var y0 = Math.floor(player.pos.y + 0.001), y1 = Math.floor(player.pos.y + PLAYER_H - 0.001);
+    var z0 = Math.floor(player.pos.z - r + 0.001), z1 = Math.floor(player.pos.z + r - 0.001);
+    for (var y = y0; y <= y1; y++) {
+      for (var z = z0; z <= z1; z++) {
+        if (isSolidAt(bx, y, z)) {
+          player.pos.x = dx > 0 ? bx - r - 0.001 : bx + 1 + r + 0.001;
+          player.vel.x = 0;
+          return;
+        }
+      }
+    }
+  }
+  function collideZ(dz) {
+    if (!dz) return;
+    posAxis(2, dz);
+    var r = PLAYER_R;
+    var bz = dz > 0 ? Math.floor(player.pos.z + r) : Math.floor(player.pos.z - r);
+    var y0 = Math.floor(player.pos.y + 0.001), y1 = Math.floor(player.pos.y + PLAYER_H - 0.001);
+    var x0 = Math.floor(player.pos.x - r + 0.001), x1 = Math.floor(player.pos.x + r - 0.001);
+    for (var y = y0; y <= y1; y++) {
+      for (var x = x0; x <= x1; x++) {
+        if (isSolidAt(x, y, bz)) {
+          player.pos.z = dz > 0 ? bz - r - 0.001 : bz + 1 + r + 0.001;
+          player.vel.z = 0;
+          return;
+        }
+      }
+    }
+  }
+  function collideY(dy) {
+    posAxis(1, dy);
+    var r = PLAYER_R;
+    if (dy < 0) {
+      onGround = false;
+      var by = Math.floor(player.pos.y);
+      var x0 = Math.floor(player.pos.x - r), x1 = Math.floor(player.pos.x + r);
+      var z0 = Math.floor(player.pos.z - r), z1 = Math.floor(player.pos.z + r);
+      for (var x = x0; x <= x1; x++) {
+        for (var z = z0; z <= z1; z++) {
+          if (isSolidAt(x, by, z)) {
+            player.pos.y = by + 1;
+            player.vel.y = 0;
+            onGround = true;
+            return;
+          }
+        }
+      }
+      if (player.pos.y <= 0) { player.pos.y = 0; player.vel.y = 0; onGround = true; }
+    } else if (dy > 0) {
+      var top = Math.floor(player.pos.y + PLAYER_H + 0.001);
+      x0 = Math.floor(player.pos.x - r); x1 = Math.floor(player.pos.x + r);
+      z0 = Math.floor(player.pos.z - r); z1 = Math.floor(player.pos.z + r);
+      for (x = x0; x <= x1; x++) {
+        for (z = z0; z <= z1; z++) {
+          if (isSolidAt(x, top, z)) {
+            player.pos.y = top - PLAYER_H - 0.001;
+            player.vel.y = 0;
+            return;
+          }
+        }
+      }
+    }
+  }
+  function posAxis(axis, d) {
+    if (axis === 0) player.pos.x += d;
+    else if (axis === 1) player.pos.y += d;
+    else player.pos.z += d;
+  }
+
+  var keys = {};
+  var touchMove = { f: 0, s: 0 };
+  var touchJump = false, touchDown = false;
+
+  function updatePlayer(dt) {
+    var feetWet = isWaterAt(player.pos.x, player.pos.y + 0.3, player.pos.z);
+    var headWet = isWaterAt(player.pos.x, player.pos.y + EYE, player.pos.z);
+    inWater = feetWet || headWet;
+
+    var f = ((keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0)) + touchMove.f;
+    var s = ((keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0)) + touchMove.s;
+    f = Math.max(-1, Math.min(1, f));
+    s = Math.max(-1, Math.min(1, s));
+
+    camera.getWorldDirection(tmpDir);
+    tmpDir.y = 0;
+    if (tmpDir.lengthSq() < 1e-6) tmpDir.set(0, 0, -1);
+    tmpDir.normalize();
+    tmpRight.crossVectors(tmpDir, UP).normalize();
+    tmpMove.set(0, 0, 0).addScaledVector(tmpDir, f).addScaledVector(tmpRight, s);
+    if (tmpMove.lengthSq() > 1) tmpMove.normalize();
+
+    var sprint = keys.ControlLeft || keys.ControlRight || false;
+    sprint = sprint && f > 0.1 && !(keys.ShiftLeft || keys.ShiftRight);
+    var sneak = (keys.ShiftLeft || keys.ShiftRight) && !flying;
+    var speed = flying ? 13 : (inWater ? 4.2 : (sprint ? 7.2 : (sneak ? 2.1 : 4.5)));
+
+    var k = Math.min(1, dt * (inWater ? 6 : 12));
+    player.vel.x += (tmpMove.x * speed - player.vel.x) * k;
+    player.vel.z += (tmpMove.z * speed - player.vel.z) * k;
+
+    if (flying) {
+      var up = ((keys.Space || touchJump) ? 1 : 0) - ((keys.ShiftLeft || keys.ShiftRight || touchDown) ? 1 : 0);
+      player.vel.y += (up * 12 - player.vel.y) * Math.min(1, dt * 8);
+      onGround = false;
+    } else {
+      player.vel.y -= (inWater ? 9 : 26) * dt;
+      if (player.vel.y < -50) player.vel.y = -50;
+      if (inWater) {
+        player.vel.y *= 1 - Math.min(1, dt * 2.4);
+        if (keys.Space || touchJump) player.vel.y = Math.max(player.vel.y, 4.4);
+      } else if ((keys.Space || touchJump) && onGround) {
+        player.vel.y = 8.3;
+        onGround = false;
+      }
+    }
+
+    collideX(player.vel.x * dt);
+    collideZ(player.vel.z * dt);
+    collideY(player.vel.y * dt);
+
+    if (player.pos.y < -30) {
+      var sp = findSpawn();
+      player.pos.set(sp.x, sp.y, sp.z);
+      player.vel.set(0, 0, 0);
+    }
+
+    // 视角晃动
+    var hSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
+    if (onGround && !flying && hSpeed > 0.6) {
+      bobPhase += dt * hSpeed * 1.7;
+    }
+    var bobY = (onGround && !flying && hSpeed > 0.6) ? Math.sin(bobPhase) * 0.055 : 0;
+    camera.position.set(player.pos.x, player.pos.y + EYE + bobY, player.pos.z);
+    camera.rotation.set(pitch, yaw, 0);
+  }
+
+  /* ================= 射线（DDA） ================= */
+  var rayDir = new THREE.Vector3();
+  function raycast(origin, dir, maxDist) {
+    var x = Math.floor(origin.x), y = Math.floor(origin.y), z = Math.floor(origin.z);
+    var stepX = dir.x > 0 ? 1 : -1, stepY = dir.y > 0 ? 1 : -1, stepZ = dir.z > 0 ? 1 : -1;
+    var tdx = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+    var tdy = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+    var tdz = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+    var tmx = dir.x !== 0 ? ((dir.x > 0 ? x + 1 - origin.x : origin.x - x) / dir.x) : Infinity;
+    var tmy = dir.y !== 0 ? ((dir.y > 0 ? y + 1 - origin.y : origin.y - y) / dir.y) : Infinity;
+    var tmz = dir.z !== 0 ? ((dir.z > 0 ? z + 1 - origin.z : origin.z - z) / dir.z) : Infinity;
+    var nx = 0, ny = 0, nz = 0;
+
+    for (var i = 0; i < 300; i++) {
+      if (tmx < tmy && tmx < tmz) {
+        if (tmx > maxDist) return null;
+        x += stepX; nx = -stepX; ny = 0; nz = 0; tmx += tdx;
+      } else if (tmy < tmz) {
+        if (tmy > maxDist) return null;
+        y += stepY; nx = 0; ny = -stepY; nz = 0; tmy += tdy;
+      } else {
+        if (tmz > maxDist) return null;
+        z += stepZ; nx = 0; ny = 0; nz = -stepZ; tmz += tdz;
+      }
+      var id = getBlock(x, y, z);
+      if (id !== AIR) return { x: x, y: y, z: z, id: id, nx: nx, ny: ny, nz: nz };
+    }
+    return null;
+  }
+
+  function intersectsPlayer(bx, by, bz) {
+    return bx + 1 > player.pos.x - PLAYER_R && bx < player.pos.x + PLAYER_R &&
+           by + 1 > player.pos.y && by < player.pos.y + PLAYER_H &&
+           bz + 1 > player.pos.z - PLAYER_R && bz < player.pos.z + PLAYER_R;
+  }
+
+  /* ================= 破坏 / 放置 / 粒子 / 音效 ================= */
+  var mouse = { left: false, right: false };
+  var lastBreak = 0, lastPlace = 0;
+
+  function doBreak() {
+    camera.getWorldDirection(rayDir);
+    var hit = raycast(camera.position, rayDir, 7);
+    if (!hit) return;
+    if (hit.y === 0 && hit.id === BEDROCK) return;
+    if (setBlockWorld(hit.x, hit.y, hit.z, AIR)) {
+      spawnParticles(hit.x, hit.y, hit.z, hit.id);
+      sfx('break');
+    }
+  }
+  function doPlace() {
+    camera.getWorldDirection(rayDir);
+    var hit = raycast(camera.position, rayDir, 7);
+    if (!hit) return;
+    var tx = hit.x + hit.nx, ty = hit.y + hit.ny, tz = hit.z + hit.nz;
+    if (ty < 1 || ty >= CH) return;
+    if (intersectsPlayer(tx, ty, tz)) return;
+    var cur = getBlock(tx, ty, tz);
+    if (cur !== AIR && cur !== WATER) return;
+    if (setBlockWorld(tx, ty, tz, HOTBAR[slotIndex])) sfx('place');
+  }
+
+  function spawnParticles(x, y, z, id) {
+    var color = BLOCK_COLORS[id] || 0x999999;
+    for (var i = 0; i < 12; i++) {
+      var m = new THREE.Mesh(partGeo, new THREE.MeshBasicMaterial({ color: color, transparent: true }));
+      m.position.set(x + 0.5 + (Math.random() - 0.5) * 0.6, y + 0.5 + (Math.random() - 0.5) * 0.6, z + 0.5 + (Math.random() - 0.5) * 0.6);
+      scene.add(m);
+      particles.push({
+        mesh: m,
+        vx: (Math.random() - 0.5) * 3, vy: 1.6 + Math.random() * 3.2, vz: (Math.random() - 0.5) * 3,
+        life: 0.5 + Math.random() * 0.4, max: 0.9
+      });
+    }
+  }
+  function updateParticles(dt) {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.vy -= 14 * dt;
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      p.life -= dt;
+      if (p.life <= 0) {
+        scene.remove(p.mesh);
+        p.mesh.material.dispose();
+        particles.splice(i, 1);
+      } else {
+        p.mesh.material.opacity = Math.max(0, p.life / p.max);
+      }
+    }
+  }
+
+  var audioCtx = null;
+  function sfx(type) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var t = audioCtx.currentTime;
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      if (type === 'break') {
+        o.type = 'square';
+        o.frequency.setValueAtTime(170, t);
+        o.frequency.exponentialRampToValueAtTime(52, t + 0.12);
+        g.gain.setValueAtTime(0.11, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+      } else {
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(540, t);
+        o.frequency.exponentialRampToValueAtTime(300, t + 0.09);
+        g.gain.setValueAtTime(0.08, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      }
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t + 0.15);
+    } catch (e) {}
+  }
+
+  /* ================= UI ================= */
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { toast.style.opacity = '0'; }, 1500);
+  }
+  function drawIcon(id, cv) {
+    var ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    var tile = id === GRASS ? 'grass_side' : (id === LOG ? 'log_side' : (BLOCK_TILES[id] || 'stone'));
+    var tc = TILES[tile];
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(atlasCanvas, tc[0] * TS, tc[1] * TS, TS, TS, 0, 0, cv.width, cv.height);
+  }
+  function updateHotbar() {
+    var slots = hotbarEl.children;
+    for (var i = 0; i < slots.length; i++) slots[i].classList.toggle('sel', i === slotIndex);
+  }
+  function selectSlot(i) {
+    slotIndex = (i + HOTBAR.length) % HOTBAR.length;
+    updateHotbar();
+    if (playing) showToast('已选择：' + BLOCK_NAMES[HOTBAR[slotIndex]]);
+  }
+
+  HOTBAR.forEach(function (id, i) {
+    var s = document.createElement('div');
+    s.className = 'slot' + (i === slotIndex ? ' sel' : '');
+    var cv = document.createElement('canvas');
+    cv.width = cv.height = 48;
+    drawIcon(id, cv);
+    var k = document.createElement('span');
+    k.className = 'key';
+    k.textContent = (i + 1) + '';
+    s.appendChild(cv); s.appendChild(k);
+    s.onclick = function () { selectSlot(i); };
+    hotbarEl.appendChild(s);
+  });
+
+  /* ================= 桌面输入 ================= */
+  var playing = false, started = false;
+
+  function clampPitch() { pitch = Math.max(-1.55, Math.min(1.55, pitch)); }
+
+  document.addEventListener('mousemove', function (e) {
+    if (!playing) return;
+    if (document.pointerLockElement === canvas || !canvas.requestPointerLock) {
+      yaw -= (e.movementX || 0) * 0.0022;
+      pitch -= (e.movementY || 0) * 0.0022;
+      clampPitch();
+    }
+  });
+
+  document.addEventListener('mousedown', function (e) {
+    if (!playing) return;
+    if (e.button === 0) { mouse.left = true; doBreak(); lastBreak = performance.now(); }
+    else if (e.button === 2) { mouse.right = true; doPlace(); lastPlace = performance.now(); }
+    else if (e.button === 1) {
+      camera.getWorldDirection(rayDir);
+      var hit = raycast(camera.position, rayDir, 7);
+      if (hit) {
+        var idx = HOTBAR.indexOf(hit.id);
+        if (idx >= 0) selectSlot(idx);
+      }
+    }
+  });
+  document.addEventListener('mouseup', function (e) {
+    if (e.button === 0) mouse.left = false;
+    if (e.button === 2) mouse.right = false;
+  });
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  document.addEventListener('keydown', function (e) {
+    keys[e.code] = true;
+    if (!playing) return;
+    if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
+    if (e.code === 'KeyF') {
+      flying = !flying;
+      player.vel.y = 0;
+      showToast(flying ? '✈ 飞行模式已开启' : '🚶 飞行模式已关闭');
+      document.getElementById('btnDown').style.display = flying ? 'block' : 'none';
+    }
+    if (e.code.indexOf('Digit') === 0) {
+      var n = parseInt(e.code.slice(5), 10);
+      if (n >= 1 && n <= 9) selectSlot(n - 1);
+    }
+  });
+  document.addEventListener('keyup', function (e) { keys[e.code] = false; });
+  window.addEventListener('blur', function () {
+    keys = {};
+    mouse.left = mouse.right = false;
+    touchMove.f = touchMove.s = 0;
+    touchJump = touchDown = false;
+  });
+
+  document.addEventListener('wheel', function (e) {
+    if (!playing) return;
+    e.preventDefault();
+    selectSlot(slotIndex + (e.deltaY > 0 ? 1 : -1));
+  }, { passive: false });
+
+  document.addEventListener('pointerlockchange', function () {
+    if (document.pointerLockElement === canvas) {
+      playing = true; started = true;
+      blocker.classList.add('hidden');
+    } else if (started) {
+      playing = false;
+      mouse.left = mouse.right = false;
+      blocker.classList.remove('hidden');
+      btnPlay.textContent = '▶ 继续游戏';
+      saveGame();
+    }
+  });
+
+  btnPlay.addEventListener('click', function () {
+    if (isTouch) {
+      started = true; playing = true;
+      blocker.classList.add('hidden');
+      return;
+    }
+    if (canvas.requestPointerLock) canvas.requestPointerLock();
+    else { started = true; playing = true; blocker.classList.add('hidden'); }
+  });
+  btnNew.addEventListener('click', function () {
+    if (confirm('确定要生成一个全新的世界吗？当前世界的所有改动都会丢失。')) {
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+      location.reload();
+    }
+  });
+
+  /* ================= 触屏输入 ================= */
+  var joy = document.getElementById('joy'), joyThumb = document.getElementById('joyThumb');
+  var joyId = null;
+  function joyVector(e) {
+    var r = joy.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var dx = e.clientX - cx, dy = e.clientY - cy;
+    var len = Math.sqrt(dx * dx + dy * dy), max = 42;
+    if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+    joyThumb.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    touchMove.s = dx / max;
+    touchMove.f = -dy / max;
+  }
+  if (isTouch) {
+    joy.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'touch') return;
+      joyId = e.pointerId;
+      joy.setPointerCapture(e.pointerId);
+      joyVector(e);
+    });
+    joy.addEventListener('pointermove', function (e) {
+      if (e.pointerId === joyId) joyVector(e);
+    });
+    var joyUp = function (e) {
+      if (e.pointerId === joyId) {
+        joyId = null;
+        touchMove.s = touchMove.f = 0;
+        joyThumb.style.transform = 'translate(0,0)';
+      }
+    };
+    joy.addEventListener('pointerup', joyUp);
+    joy.addEventListener('pointercancel', joyUp);
+
+    document.getElementById('btnJump').addEventListener('pointerdown', function (e) {
+      e.preventDefault(); touchJump = true;
+    });
+    document.getElementById('btnJump').addEventListener('pointerup', function () { touchJump = false; });
+    document.getElementById('btnJump').addEventListener('pointercancel', function () { touchJump = false; });
+    document.getElementById('btnDown').addEventListener('pointerdown', function (e) {
+      e.preventDefault(); touchDown = true;
+    });
+    document.getElementById('btnDown').addEventListener('pointerup', function () { touchDown = false; });
+    document.getElementById('btnDown').addEventListener('pointercancel', function () { touchDown = false; });
+    document.getElementById('btnBreak').addEventListener('pointerdown', function (e) {
+      e.preventDefault(); if (playing) doBreak();
+    });
+    document.getElementById('btnPlace').addEventListener('pointerdown', function (e) {
+      e.preventDefault(); if (playing) doPlace();
+    });
+    document.getElementById('btnFly').addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      flying = !flying;
+      showToast(flying ? '✈ 飞行模式已开启' : '🚶 飞行模式已关闭');
+      document.getElementById('btnDown').style.display = flying ? 'block' : 'none';
+    });
+    document.getElementById('btnPause').addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (!playing) return;
+      playing = false;
+      blocker.classList.remove('hidden');
+      btnPlay.textContent = '▶ 继续游戏';
+    });
+
+    var lookPointers = new Map();
+    document.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'touch' || !playing) return;
+      if (e.target.closest && e.target.closest('.ctl')) return;
+      lookPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    });
+    document.addEventListener('pointermove', function (e) {
+      var p = lookPointers.get(e.pointerId);
+      if (!p || !playing) return;
+      var dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      yaw -= dx * 0.0042;
+      pitch -= dy * 0.0042;
+      clampPitch();
+    });
+    var lookUp = function (e) { lookPointers.delete(e.pointerId); };
+    document.addEventListener('pointerup', lookUp);
+    document.addEventListener('pointercancel', lookUp);
+  }
+
+  /* ================= 主循环 ================= */
+  var fps = 0, frameCount = 0, fpsTime = performance.now();
+  var infoTime = 0;
+
+  function updateHighlight() {
+    camera.getWorldDirection(rayDir);
+    var hit = raycast(camera.position, rayDir, 7);
+    if (hit) {
+      highlight.visible = true;
+      highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+    } else {
+      highlight.visible = false;
+    }
+  }
+
+  var last = performance.now();
+  function animate() {
+    requestAnimationFrame(animate);
+    var now = performance.now();
+    var dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.1) dt = 0.1;
+    frameCount++;
+
+    ensureChunksAround();
+    processBuildQueue(6);
+
+    if (playing) {
+      updatePlayer(dt);
+      updateParticles(dt);
+      updateHighlight();
+      if (mouse.left && now - lastBreak > 220) { doBreak(); lastBreak = now; }
+      if (mouse.right && now - lastPlace > 250) { doPlace(); lastPlace = now; }
+
+      cloudTex.offset.x = (cloudTex.offset.x + dt * 0.004) % 1;
+      cloudGroup.position.set(player.pos.x, 0, player.pos.z);
+      sunMesh.position.copy(camera.position).addScaledVector(sunDir, 650);
+
+      if (frameCount % 180 === 0) unloadFar();
+      if (dirtySave && now - lastSave > 8000) { lastSave = now; saveGame(); showToast('💾 世界已自动保存'); }
+    }
+
+    renderer.render(scene, camera);
+
+    if (now - fpsTime >= 500) {
+      fps = Math.round(frameCount * 1000 / (now - fpsTime));
+      frameCount = 0;
+      fpsTime = now;
+    }
+    if (now - infoTime > 250) {
+      infoTime = now;
+      info.textContent = 'XYZ ' + player.pos.x.toFixed(1) + ' / ' + player.pos.y.toFixed(1) + ' / ' + player.pos.z.toFixed(1) +
+        '   区块 ' + Math.floor(player.pos.x / CS) + ',' + Math.floor(player.pos.z / CS) +
+        '   FPS ' + fps +
+        (flying ? '   ✈飞行' : '') +
+        '   种子 ' + seed;
+    }
+  }
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  window.addEventListener('pagehide', saveGame);
+  window.addEventListener('beforeunload', saveGame);
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) saveGame();
+  });
+
+  /* ================= 启动 ================= */
+  if (savedPos && isFinite(savedPos.x) && isFinite(savedPos.y) && isFinite(savedPos.z)) {
+    player.pos.set(savedPos.x, savedPos.y, savedPos.z);
+  } else {
+    var sp = findSpawn();
+    player.pos.set(sp.x, sp.y, sp.z);
+  }
+  camera.position.set(player.pos.x, player.pos.y + EYE, player.pos.z);
+  camera.rotation.set(pitch, yaw, 0);
+
+  loadState.textContent = '✅ 世界已就绪 · 种子：' + seed;
+  ensureChunksAround();
+  animate();
+})();
+</script>
+</body>
+</html>
