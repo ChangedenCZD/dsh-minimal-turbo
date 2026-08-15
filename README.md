@@ -1,7 +1,8 @@
 # dsh-minimal-turbo
 Deepseek Harness 极简模式 Windows适配，享用满血Deepseek-V4系列模型。
 
-意在兼容Windows，并顺带减少流程的轮次（有足够工具可以调研，不再啰嗦）。
+1. 意在兼容Windows
+2. 一并强化了所有系统的极简模式流程，减少了思考轮次（因为有足够工具可以调用，不再啰嗦）
 
 ## 使用方式
 
