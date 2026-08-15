@@ -1,4 +1,4 @@
-# dsh-minimal-agent-cordis
+# dsh-minimal-turbo
 Deepseek Harness 极简模式 Windows适配，享用满血Deepseek-V4系列模型。
 
 意在兼容Windows，并顺带减少流程的轮次（有足够工具可以调研，不再啰嗦）。
