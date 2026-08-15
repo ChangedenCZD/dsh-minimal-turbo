@@ -8,6 +8,8 @@ Deepseek Harness 极简模式 Windows适配，享用满血Deepseek-V4系列模�
 
 **注意：覆盖保存后，记得重启dsh，再选择极简模式重新开任务**
 
+**已知MCP、SKILL等会影响到首轮思考，建议关闭相关配置后测试**
+
 ## 使用方式
 
 1. 进入nodejs包管理目录`node_modules`
