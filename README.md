@@ -44,7 +44,7 @@ Deepseek Harness 极简模式/许愿模式 Windows适配，享用满血Deepseek-
 
 > 直接复制本仓库中的 [`minimal/agent.cordis.yml`](minimal/agent.cordis.yml) 文件内容，覆盖 `node_modules\@deepseek-ai\dsh\config\agent-presets\minimal\agent.cordis.yml` 即可。
 
-### wish（新增许愿模式）
+### wish（新增许愿模式，实验中）
 
 新增独立模式，可直接复用整个目录，不影响官方预设。
 
