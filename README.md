@@ -29,10 +29,7 @@ Deepseek Harness 极简模式/许愿模式 Windows适配，享用满血Deepseek-
 
 ### wish（许愿模式）
 
-- 基于极简模式的增强版：工具更全（`bash`/`pwsh`、文件系统、文件搜索、goal、ask-user、todo），支持向用户提问与任务拆解
-- 开启上下文压缩（compaction-basic），超长上下文自动修剪工具结果，tokenMeter 位于宿主平面，跨会话稳定
-- persona 提示词要求使用 `We need` 前缀进行推理，产出更结构化的执行计划
-- 适合：复杂、多步骤、长会话任务，需要交互提问、并行待办与自动压缩的场合
+- 核心思想是打断模型首次思考，防止直接雷霆思考
 
 ## 使用方式
 
@@ -44,7 +41,7 @@ Deepseek Harness 极简模式/许愿模式 Windows适配，享用满血Deepseek-
 
 > 直接复制本仓库中的 [`minimal/agent.cordis.yml`](minimal/agent.cordis.yml) 文件内容，覆盖 `node_modules\@deepseek-ai\dsh\config\agent-presets\minimal\agent.cordis.yml` 即可。
 
-### wish（新增许愿模式，实验中）
+### wish（许愿模式）
 
 新增独立模式，可直接复用整个目录，不影响官方预设。
 
