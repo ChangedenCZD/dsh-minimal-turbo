@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Kerr–Newman 黑洞 · WebGL Raymarching</title>
+<style>
+  :root {
+    --bg: #04060b;
+    --panel: rgba(14, 20, 32, 0.72);
+    --panel-border: rgba(120, 180, 255, 0.16);
+    --text: #c8d6ea;
+    --dim: #7c8aa5;
+    --accent: #7fd6ff;
+    --accent2: #ffd27f;
+    --slider: rgba(127, 214, 255, 0.55);
+    --danger: #ff7b8a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    overflow: hidden;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--text);
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #glcanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  #glcanvas.dragging { cursor: grabbing; }
+
+  #title {
+    position: fixed; top: 18px; left: 22px; pointer-events: none; z-index: 5;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.8);
+  }
+  #title h1 {
+    font-size: 21px; font-weight: 600; letter-spacing: 0.06em;
+    background: linear-gradient(90deg, #eaf6ff, #7fd6ff 55%, #ffd27f);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  #title .sub { margin-top: 4px; font-size: 11px; color: var(--dim); letter-spacing: 0.12em; }
+
+  #fps {
+    position: fixed; top: 18px; right: 22px; z-index: 5;
+    font-size: 12px; color: var(--dim); pointer-events: none;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.9);
+  }
+  #hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 5; font-size: 11px; color: var(--dim); pointer-events: none;
+    background: rgba(10, 14, 22, 0.45); border: 1px solid rgba(127,214,255,0.10);
+    padding: 6px 14px; border-radius: 999px; letter-spacing: 0.06em;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  }
+
+  #panel {
+    position: fixed; top: 18px; left: 18px; z-index: 10;
+    width: 336px; max-height: calc(100vh - 36px);
+    overflow-y: auto; overflow-x: hidden;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    padding: 16px 16px 12px;
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: 0 18px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+    scrollbar-width: thin; scrollbar-color: rgba(127,214,255,0.25) transparent;
+  }
+  #panel::-webkit-scrollbar { width: 5px; }
+  #panel::-webkit-scrollbar-thumb { background: rgba(127,214,255,0.22); border-radius: 999px; }
+
+  #panelHead {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; padding: 0 2px;
+  }
+  #panelHead .t { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #e8f2ff; }
+  #panelHead .t span { color: var(--accent); }
+  #collapseBtn {
+    background: rgba(127,214,255,0.08); border: 1px solid rgba(127,214,255,0.18);
+    color: var(--accent); font-size: 12px; padding: 4px 10px; border-radius: 8px; cursor: pointer;
+  }
+  #collapseBtn:hover { background: rgba(127,214,255,0.16); }
+
+  details.group { margin-bottom: 8px; border: 1px solid rgba(127,214,255,0.10); border-radius: 12px; background: rgba(8,12,20,0.35); overflow: hidden; }
+  details.group[open] { border-color: rgba(127,214,255,0.22); }
+  summary {
+    list-style: none; cursor: pointer; padding: 9px 12px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.10em; color: #aecbee;
+    display: flex; align-items: center; gap: 8px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "▸"; display: inline-block; transition: transform 0.18s ease;
+    color: var(--accent); font-size: 10px;
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  .groupBody { padding: 2px 12px 10px; }
+
+  .row { display: grid; grid-template-columns: 86px 1fr 52px; align-items: center; gap: 8px; margin: 7px 0; }
+  .row label { font-size: 11px; color: var(--dim); letter-spacing: 0.02em; white-space: nowrap; }
+  .row .val {
+    font-size: 11px; text-align: right; color: var(--accent2);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+  }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 3px; border-radius: 999px;
+    background: linear-gradient(90deg, rgba(127,214,255,0.55), rgba(127,214,255,0.18));
+    outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 13px; height: 13px; border-radius: 50%;
+    background: #eaf6ff; border: 2px solid var(--accent);
+    box-shadow: 0 0 10px rgba(127,214,255,0.65); cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #eaf6ff; border: 2px solid var(--accent);
+    box-shadow: 0 0 10px rgba(127,214,255,0.65); cursor: pointer;
+  }
+  .checkRow { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 11px; color: var(--dim); }
+  .checkRow input { accent-color: var(--accent); cursor: pointer; }
+  #resetBtn {
+    width: 100%; margin-top: 4px; padding: 8px; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(90deg, rgba(127,214,255,0.12), rgba(255,210,127,0.10));
+    border: 1px solid rgba(127,214,255,0.22); color: var(--text); font-size: 12px; letter-spacing: 0.1em;
+  }
+  #resetBtn:hover { background: linear-gradient(90deg, rgba(127,214,255,0.22), rgba(255,210,127,0.18)); }
+  #error {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(4,6,11,0.92); color: var(--danger); font-size: 14px; padding: 40px; line-height: 1.7;
+  }
+  #panel.collapsed .groupBody, #panel.collapsed #panelHead + *, #panel.collapsed #resetBtn { display: none; }
+  #panel.collapsed { width: 170px; }
+  @media (max-width: 640px) {
+    #panel { width: min(86vw, 336px); }
+    #title h1 { font-size: 16px; }
+    #hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<div id="title">
+  <h1>KERR–NEWMAN 黑洞</h1>
+  <div class="sub">INGOING KERR–SCHILD · 哈密顿光子追踪 · 3D 体积吸积盘</div>
+</div>
+<div id="fps">— fps</div>
+<div id="hint">拖拽旋转 · 滚轮缩放 · 触屏双指缩放 · 左侧面板调整参数</div>
+
+<div id="panel">
+  <div id="panelHead">
+    <div class="t">参数 <span>·</span> 控制台</div>
+    <button id="collapseBtn">收起</button>
+  </div>
+  <div id="controls"></div>
+  <button id="resetBtn">重置全部参数</button>
+</div>
+<div id="error"></div>
+
+<!-- ===================== Shaders ===================== -->
+<script id="vertPost" type="x-shader/x-vertex">
+#version 300 es
+void main() {
+  vec2 pos = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
+}
+</script>
+
+<script id="fragRaymarch" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+precision highp int;
+
+#define MAXLOOP 9000
+#define MAXSUB 16
+#define M_ 1.0
+
+uniform vec2  u_res;
+uniform float u_aspect;
+uniform float u_tanF;
+uniform vec3  u_camPos;
+uniform vec3  u_camR;
+uniform vec3  u_camU;
+uniform vec3  u_camF;
+uniform float u_a;
+uniform float u_Q;
+uniform float u_time;
+uniform float u_maxSteps;
+uniform float u_hMax;
+uniform float u_hMin;
+uniform float u_kP;
+uniform float u_kC;
+uniform float u_kR;
+uniform float u_rFar;
+uniform float u_horizonPT;
+uniform float u_qCross;
+uniform float u_qMin;
+uniform float u_ringMargin;
+uniform float u_volStep;
+uniform float u_density;
+uniform float u_diskTemp;
+uniform float u_tempFall;
+uniform float u_diskIn;
+uniform float u_diskInSoft;
+uniform float u_diskOut;
+uniform float u_diskOutSoft;
+uniform float u_diskFall;
+uniform float u_diskH;
+uniform float u_diskHExp;
+uniform float u_diskTurb;
+uniform float u_noiseFreq;
+uniform float u_diskFlow;
+uniform float u_beaming;
+uniform float u_extinction;
+uniform vec3  u_extColor;
+out vec4 fragColor;
+
+struct Metric {
+  float q;      // sqrt(R^2) >= 0
+  float f;      // KS metric function f = (2 M r - Q^2)/Sigma
+  vec3  k;      // covariant spatial null vector k_i
+  vec3  dkx;    // grad of k_x
+  vec3  dky;    // grad of k_y
+  vec3  dkz;    // grad of k_z
+  vec3  df;     // grad of f
+  float ptc;    // p^t = dt/dlambda
+};
+
+/* ---------- Kerr-Schild coordinate helpers ---------- */
+
+float qOf(vec3 X) {
+  float a2 = u_a * u_a;
+  float B = dot(X, X) - a2;
+  float D = sqrt(max(B * B + 4.0 * a2 * X.z * X.z, 1e-30));
+  return sqrt(max(0.5 * (B + D), 0.0));
+}
+
+/*
+  Metric evaluation at sheet sign s (r = s*q).
+  H = 1/2 [ -pt^2 + p_i p_i - f * K^2 ],  K = k^mu p_mu = -pt + k_i p_i.
+  dx^mu/dlambda = ( -pt + f K ,  p_i - f K k_i )
+  dp_i/dlambda  = 1/2 K^2 df_i + f K (p_x dkx_i + p_y dky_i + p_z dkz_i)
+*/
+void evalMetric(vec3 X, float s, vec4 P, out Metric M, out float K, out vec3 F) {
+  float a2 = u_a * u_a;
+  float B = dot(X, X) - a2;
+  float D = sqrt(max(B * B + 4.0 * a2 * X.z * X.z, 1e-30));
+  float R2 = max(0.5 * (B + D), 0.0);
+  float q = sqrt(max(R2, 1e-30));
+  M.q = q;
+
+  vec3 g = vec3(
+    X.x * (1.0 + B / D),
+    X.y * (1.0 + B / D),
+    X.z * (1.0 + (B + 2.0 * a2) / D)
+  );
+  vec3 qi = g / max(2.0 * q, 1e-12);
+  float u = X.z / max(q, 1e-12);
+  vec3 ui = (vec3(0.0, 0.0, 1.0) * q - X.z * qi) / max(q * q, 1e-24);
+
+  float N = q * q + a2;
+  vec3 k = vec3(
+    (s * q * X.x + u_a * X.y) / N,
+    (s * q * X.y - u_a * X.x) / N,
+    s * u
+  );
+  M.k = k;
+
+  vec3 ex = vec3(1.0, 0.0, 0.0);
+  vec3 ey = vec3(0.0, 1.0, 0.0);
+  M.dkx = ((s * qi * X.x + s * q * ex + u_a * ey) * N
+           - (s * q * X.x + u_a * X.y) * (2.0 * q * qi)) / (N * N);
+  M.dky = ((s * qi * X.y + s * q * ey - u_a * ex) * N
+           - (s * q * X.y - u_a * X.x) * (2.0 * q * qi)) / (N * N);
+  M.dkz = s * ui;
+
+  float sigma = q * q + a2 * u * u;
+  float fnum = 2.0 * s * q - u_Q * u_Q;
+  float f = fnum / max(sigma, 1e-24);
+  M.f = f;
+
+  vec3 sigmaGrad = 2.0 * q * qi + 2.0 * a2 * u * ui;
+  M.df = (2.0 * s * qi * sigma - fnum * sigmaGrad) / max(sigma * sigma, 1e-30);
+
+  K = -P.x + dot(k, P.yzw);
+  vec3 Kgrad = P.y * M.dkx + P.z * M.dky + P.w * M.dkz;
+  F = 0.5 * K * K * M.df + f * K * Kgrad;
+  M.ptc = -P.x + f * K;
+}
+
+void deriv(vec4 X, vec4 P, float s, out vec4 dX, out vec4 dP) {
+  Metric M; float K; vec3 F;
+  evalMetric(X.xyz, s, P, M, K, F);
+  dX = vec4(-P.x + M.f * K, P.yzw - M.f * K * M.k);
+  dP = vec4(0.0, F);
+}
+
+void rk4Step(vec4 X, vec4 P, float s, float h, out vec4 Xn, out vec4 Pn) {
+  vec4 k1x, k1p, k2x, k2p, k3x, k3p, k4x, k4p;
+  deriv(X, P, s, k1x, k1p);
+  deriv(X + 0.5 * h * k1x, P + 0.5 * h * k1p, s, k2x, k2p);
+  deriv(X + 0.5 * h * k2x, P + 0.5 * h * k2p, s, k3x, k3p);
+  deriv(X + h * k3x, P + h * k3p, s, k4x, k4p);
+  Xn = X + h * (k1x + 2.0 * k2x + 2.0 * k3x + k4x) / 6.0;
+  Pn = P + h * (k1p + 2.0 * k2p + 2.0 * k3p + k4p) / 6.0;
+}
+
+/*
+  Hamiltonian correction: keep H = 0 (photon stays massless) by scaling the
+  spatial momentum, preserving the time component pt (energy at infinity).
+  Solves  a*alpha^2 + b*alpha + c = 0  with alpha closest to 1.
+*/
+void hcorr(vec4 X, inout vec4 P, float s) {
+  Metric M; float K; vec3 F;
+  evalMetric(X.xyz, s, P, M, K, F);
+  float f = M.f;
+  float L = dot(M.k, P.yzw);
+  float Psp = dot(P.yzw, P.yzw);
+  float a = Psp - f * L * L;
+  float b = 2.0 * f * P.x * L;
+  float c = -(1.0 + f) * P.x * P.x;
+  float alpha = 1.0;
+  if (abs(a) > 1e-10) {
+    float disc = b * b - 4.0 * a * c;
+    if (disc < 0.0) disc = 0.0;
+    float sq = sqrt(disc);
+    float r1 = (-b + sq) / (2.0 * a);
+    float r2 = (-b - sq) / (2.0 * a);
+    alpha = (abs(r1 - 1.0) < abs(r2 - 1.0)) ? r1 : r2;
+  } else if (abs(b) > 1e-10) {
+    alpha = -c / b;
+  }
+  if (isnan(alpha) || alpha <= 0.0) alpha = 1.0;
+  alpha = clamp(alpha, 0.25, 4.0);
+  P.yzw *= alpha;
+}
+
+/* ---------- noise ---------- */
+
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float vnoise(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  float n000 = hash13(i);
+  float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+  float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+  float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+  float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+  float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+  float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+  float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+  float nx00 = mix(n000, n100, f.x);
+  float nx10 = mix(n010, n110, f.x);
+  float nx01 = mix(n001, n101, f.x);
+  float nx11 = mix(n011, n111, f.x);
+  float nxy0 = mix(nx00, nx10, f.y);
+  float nxy1 = mix(nx01, nx11, f.y);
+  return mix(nxy0, nxy1, f.z);
+}
+
+float fbm3(vec3 p) {
+  float s = 0.0;
+  float amp = 0.5;
+  for (int i = 0; i < 4; i++) {
+    s += amp * vnoise(p);
+    p = p * 2.03 + vec3(11.7, 5.1, 7.9);
+    amp *= 0.5;
+  }
+  return s;
+}
+
+vec3 hash33(vec3 p3) {
+  p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yxz + 33.33);
+  return fract((p3.xxy + p3.yxx) * p3.zyx);
+}
+
+/* ---------- blackbody (Tanner Helland approximation, sRGB-ish) ---------- */
+
+vec3 blackbody(float T) {
+  T = clamp(T, 1000.0, 40000.0);
+  float t = T * 0.01;
+  float r, g, b;
+  if (t <= 66.0) {
+    r = 1.0;
+    g = clamp((99.4708025861 * log(t) - 161.1195681661) / 255.0, 0.0, 1.0);
+  } else {
+    r = clamp(1.29293618606 * pow(t - 60.0, -0.1332047592), 0.0, 1.0);
+    g = clamp((288.1221695283 * pow(t - 60.0, -0.0755148492)) / 255.0, 0.0, 1.0);
+  }
+  if (t >= 66.0) {
+    b = 1.0;
+  } else if (t <= 19.0) {
+    b = 0.0;
+  } else {
+    b = clamp((138.5177312231 * log(t - 10.0) - 305.0447927307) / 255.0, 0.0, 1.0);
+  }
+  return vec3(r, g, b);
+}
+
+/* ---------- disk Doppler (Kerr equatorial circular orbit approximation) ---------- */
+
+float dopplerG(vec3 X, vec4 P, float r, out float Omega) {
+  // prograde equatorial circular orbit angular velocity in Kerr (M=1)
+  float rr = max(r, 0.05);
+  Omega = 1.0 / (pow(rr, 1.5) + u_a);
+  float gtt   = -(1.0 - 2.0 / rr);
+  float gtphi = -2.0 * u_a / rr;
+  float gphiphi = rr * rr + u_a * u_a + 2.0 * u_a * u_a / rr;
+  float A = -gtt - 2.0 * Omega * gtphi - Omega * Omega * gphiphi;
+
+  // Inside the photon orbit the Keplerian formula becomes non-timelike;
+  // fall back toward the ZAMO angular velocity and keep u^t finite.
+  float OmZ = 2.0 * u_a / (rr * rr * rr + rr * u_a * u_a + 2.0 * u_a * u_a);
+  if (A <= 0.0 || isnan(A)) {
+    Omega = OmZ * 0.9;
+    A = -gtt - 2.0 * Omega * gtphi - Omega * Omega * gphiphi;
+  }
+  for (int i = 0; i < 6; i++) {
+    if (A > 0.0) break;
+    Omega *= 0.72;
+    A = -gtt - 2.0 * Omega * gtphi - Omega * Omega * gphiphi;
+  }
+  float ut = 1.0 / sqrt(max(A, 1e-5));
+  // p_phi = x*p_y - y*p_x (conserved Killing quantity)
+  float pphi = X.x * P.z - X.y * P.y;
+  float g = -ut * (P.x + Omega * pphi);
+  return clamp(g, 0.02, 80.0);
+}
+
+/* ---------- starfield / sky ---------- */
+
+vec3 starLayer(vec3 d, float cell, float size, float bright) {
+  vec3 p = d * cell;
+  vec3 id = floor(p);
+  vec3 f = fract(p) - 0.5;
+  vec3 sum = vec3(0.0);
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int k = -1; k <= 1; k++) {
+        vec3 off = vec3(float(i), float(j), float(k));
+        vec3 cid = id + off;
+        vec3 h = hash33(cid);
+        if (h.z > 0.55) {
+          vec3 cp = h - 0.5 + off;
+          float rr = length(f - cp);
+          float inten = exp(-rr * rr / (0.22 * size * size));
+          float brightStar = smoothstep(0.55, 0.95, h.z);
+          vec3 scol = mix(vec3(0.65, 0.82, 1.25), vec3(1.15, 0.85, 0.60), h.x);
+          sum += inten * scol * bright * brightStar * (0.4 + 0.6 * h.y);
+        }
+      }
+    }
+  }
+  return sum;
+}
+
+vec3 skyColor(vec3 d) {
+  vec3 dir = normalize(d);
+  float n = fbm3(dir * 3.5 + vec3(13.0, 7.0, 3.0));
+  vec3 col = vec3(0.004, 0.006, 0.013) * (0.35 + 0.65 * n);
+  // soft galactic band
+  float band = exp(-pow((dir.z * 0.92 + dir.y * 0.38) * 3.0, 2.0));
+  col += band * vec3(0.014, 0.016, 0.026) * (0.5 + n);
+  // stars
+  col += starLayer(dir, 60.0, 0.035, 1.4);
+  col += starLayer(dir, 170.0, 0.016, 1.8);
+  col += starLayer(dir, 420.0, 0.0075, 2.2);
+  return col;
+}
+
+/* ---------- local metric contraction for the camera tetrad ---------- */
+
+float gdot(vec4 u, vec4 v, float f, vec3 k) {
+  return -(1.0 - f) * u.x * v.x + dot(u.yzw, v.yzw)
+       + f * (u.x * dot(k, v.yzw) + v.x * dot(k, u.yzw) + dot(k, u.yzw) * dot(k, v.yzw));
+}
+
+vec4 projv(vec4 w, vec4 uobs, float f, vec3 k) {
+  // w + u * (u . w);  with u . u = -1 this is the u-orthogonal projection
+  return w + uobs * gdot(uobs, w, f, k);
+}
+
+vec4 norm4(vec4 v, float f, vec3 k) {
+  return v / sqrt(max(gdot(v, v, f, k), 1e-12));
+}
+
+/* ---------- main ---------- */
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_res;
+  float sx = (2.0 * uv.x - 1.0) * u_aspect * u_tanF;
+  float sy = (2.0 * uv.y - 1.0) * u_tanF;
+  vec3 rd = normalize(u_camF + u_camR * sx + u_camU * sy);
+
+  // --- static observer tetrad at camera ---
+  float a2c = u_a * u_a;
+  vec3 Xc = u_camPos;
+  float Bc = dot(Xc, Xc) - a2c;
+  float Dc = sqrt(max(Bc * Bc + 4.0 * a2c * Xc.z * Xc.z, 1e-30));
+  float R2c = max(0.5 * (Bc + Dc), 1e-30);
+  float qc = sqrt(R2c);
+  float sigc = R2c + a2c * Xc.z * Xc.z / R2c;
+  float fc = (2.0 * qc - u_Q * u_Q) / max(sigc, 1e-30);
+  float Nc = R2c + a2c;
+  vec3 kc = vec3(
+    (qc * Xc.x + u_a * Xc.y) / Nc,
+    (qc * Xc.y - u_a * Xc.x) / Nc,
+    Xc.z / max(qc, 1e-12)
+  );
+
+  vec4 uobs = vec4(1.0 / sqrt(max(1.0 - fc, 1e-6)), 0.0, 0.0, 0.0);
+  vec4 e1 = norm4(projv(vec4(0.0, u_camR), uobs, fc, kc), fc, kc);
+  vec4 w2 = projv(vec4(0.0, u_camU), uobs, fc, kc);
+  vec4 e2 = norm4(w2 - e1 * gdot(e1, w2, fc, kc), fc, kc);
+  vec4 w3 = projv(vec4(0.0, u_camF), uobs, fc, kc);
+  vec4 e3 = norm4(w3 - e1 * gdot(e1, w3, fc, kc) - e2 * gdot(e2, w3, fc, kc), fc, kc);
+
+  // Photon arrives FROM screen direction rd, so its spatial direction is -rd.
+  float invLen = inversesqrt(sx * sx + sy * sy + 1.0);
+  vec4 n4 = (e1 * (-sx) + e2 * (-sy) + e3 * (-1.0)) * invLen;
+  vec4 pc = uobs + n4;              // contravariant p^mu, E_obs = 1
+  vec4 P;
+  P.x = -(1.0 - fc) * pc.x + fc * dot(kc, pc.yzw);
+  P.yzw = pc.yzw + fc * kc * (pc.x + dot(kc, pc.yzw));
+
+  vec4 X = vec4(0.0, Xc);
+  float s = 1.0;                    // sheet sign: +1 our universe, -1 antiverse
+
+  vec3 Lrad = vec3(0.0);
+  vec3 tau = vec3(0.0);
+  float prevZ = X.z;
+  int mode = 0;                     // 1 sky, 2 antiverse sky, 3 horizon, 4 singularity, 5 error
+
+  for (int i = 0; i < MAXLOOP; i++) {
+    if (i >= int(u_maxSteps)) { mode = 3; break; }
+
+    float q = qOf(X.xyz);
+    float rho = length(X.xy);
+
+    if (isnan(q) || isnan(X.x) || isnan(X.y) || isnan(X.z) || isnan(P.x) || isnan(P.y)) {
+      mode = 5; break;
+    }
+
+    // escape to infinity (either sheet)
+    if (q > u_rFar) {
+      mode = (s < 0.0) ? 2 : 1;
+      break;
+    }
+
+    // ring singularity / naked ring region
+    if (q < u_qCross && abs(rho - u_a) < u_ringMargin) { mode = 4; break; }
+    if (q < u_qMin) {
+      if (u_a < 0.02 || rho > u_a * 0.98) { mode = 4; break; }
+      // inside the r=0 disk (rho < a): keep going, the crossing check will flip sheet
+    }
+
+    Metric M; float K; vec3 F;
+    evalMetric(X.xyz, s, P, M, K, F);
+    if (isnan(M.ptc) || isnan(M.f)) { mode = 5; break; }
+
+    // horizon: photon energy (dt/dlambda) blows up -> severe redshift
+    if (isinf(M.ptc) || abs(M.ptc) > u_horizonPT) { mode = 3; break; }
+
+    // adaptive affine step (natural parameter, never divided by spatial velocity)
+    float h = u_hMax;
+    h = min(h, u_kP / (1.0 + abs(M.ptc)));       // horizon / high-energy region
+    h = min(h, u_kR * max(q, 0.001));            // coordinate scale (ring/disk)
+    h = min(h, u_kC / (1.0 + length(F)));        // metric curvature (a, Q dependent)
+    h = max(h, u_hMin);
+
+    vec4 Xn, Pn;
+    rk4Step(X, P, s, -h, Xn, Pn);
+
+    float qn = qOf(Xn.xyz);
+    float rhoN = length(Xn.xy);
+
+    // crossing the r=0 disk inside the ring -> flip to antiverse
+    bool crossDisk = (prevZ * Xn.z < 0.0) ||
+                     (abs(Xn.z) < 1e-4 && abs(prevZ) > 1e-4);
+    if (crossDisk && rhoN < u_a * 0.98 && qn < u_qCross) {
+      s = -s;
+    }
+
+    hcorr(Xn, Pn, s);
+
+    // ---- 3D volume accretion disk (only in our sheet) ----
+    vec3 dpos = Xn.xyz - X.xyz;
+    float dlen = length(dpos);
+    if (s > 0.0 && dlen > 1e-6) {
+      int n = int(ceil(dlen / u_volStep));
+      n = clamp(n, 1, MAXSUB);
+      float ds = dlen / float(n);
+      for (int j = 0; j < MAXSUB; j++) {
+        if (j >= n) break;
+        float jit = hash13(vec3(gl_FragCoord.xy, float(i) * 1.73 + float(j) * 7.31 + 13.37));
+        float tt = (float(j) + jit) / float(n);
+        vec3 sp = X.xyz + dpos * tt;
+
+        float r = qOf(sp);
+        float zS = sp.z;
+
+        // cheap skip outside the disk body
+        if (r < u_diskIn * 0.8 || r > u_diskOut + 5.0 * u_diskOutSoft) continue;
+
+        float H = u_diskH * pow(max(r, 0.05), u_diskHExp);
+        if (abs(zS) > 5.0 * H) continue;
+
+        float inE = (r > u_diskIn) ? (1.0 - exp(-pow((r - u_diskIn) / max(u_diskInSoft, 1e-3), 2.0))) : 0.0;
+        float outE = (r < u_diskOut) ? 1.0 : exp(-pow((r - u_diskOut) / max(u_diskOutSoft, 1e-3), 2.0));
+        float vert = exp(-zS * zS / (2.0 * H * H));
+        float radial = exp(-r / max(u_diskFall, 1e-3));
+        float dens0 = inE * outE * vert * radial;
+        if (dens0 < 1e-5) continue;
+
+        float Omega;
+        float g = dopplerG(sp, P, r, Omega);
+
+        // turbulent noise advected with the local Keplerian flow (differential rotation)
+        float rotAng = Omega * u_time * u_diskFlow;
+        float cr = cos(rotAng);
+        float sr = sin(rotAng);
+        vec2 rot = vec2(cr * sp.x + sr * sp.y, -sr * sp.x + cr * sp.y);
+        float n1 = fbm3(vec3(rot.x * u_noiseFreq, rot.y * u_noiseFreq, sp.z * u_noiseFreq * 2.0));
+        float n2 = fbm3(vec3(rot.x * u_noiseFreq * 2.7 + 11.0 + u_time * 0.01,
+                             rot.y * u_noiseFreq * 2.7 + 5.0,
+                             sp.z * u_noiseFreq * 2.7));
+        float turb = mix(n1, n2, 0.4);
+        float dens = u_density * dens0 * (0.55 + 0.9 * turb * u_diskTurb);
+
+        // Doppler: brightness (1/g)^u_beaming AND blackbody colour temperature T/g
+        float T = u_diskTemp * exp(-max(r - u_diskIn, 0.0) / max(u_tempFall, 1e-3));
+        float Tobs = T / max(g, 0.02);
+        vec3 bb = blackbody(Tobs);
+        float dopp = pow(clamp(1.0 / max(g, 0.02), 0.0, 8.0), u_beaming);
+        vec3 em = dens * dopp * bb;
+
+        // volumetric extinction with reddening (blue absorbed more)
+        tau += u_extinction * u_extColor * dens * ds;
+        Lrad += exp(-tau) * em * ds;
+      }
+    }
+
+    X = Xn; P = Pn; prevZ = X.z;
+  }
+
+  if (mode == 0) mode = 3;   // exhausted -> treat as shadow boundary
+
+  vec3 col;
+  if (mode == 5) {
+    col = vec3(0.0);
+  } else {
+    vec3 trans = exp(-tau);
+    vec3 sky = vec3(0.0);
+    if (mode == 1) {
+      sky = skyColor(-normalize(P.yzw));
+    } else if (mode == 2) {
+      sky = vec3(1.0) - skyColor(-normalize(P.yzw));
+    }
+    // mode 3 (horizon) and 4 (singularity): black background, disk emission in front kept
+    col = Lrad + sky * trans;
+  }
+  col = clamp(col, 0.0, 60000.0);
+  fragColor = vec4(col, 1.0);
+}
+</script>
+
+<script id="fragBright" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_tex;
+uniform vec2 u_texel;    // 1 / source size
+uniform vec2 u_dstSize;  // target size (half-res bloom)
+uniform float u_threshold;
+out vec4 frag;
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_dstSize;
+  // 2x2 box downsample of the source
+  vec3 c = vec3(0.0);
+  c += texture(u_tex, uv + vec2(-0.5, -0.5) * u_texel).rgb;
+  c += texture(u_tex, uv + vec2( 0.5, -0.5) * u_texel).rgb;
+  c += texture(u_tex, uv + vec2(-0.5,  0.5) * u_texel).rgb;
+  c += texture(u_tex, uv + vec2( 0.5,  0.5) * u_texel).rgb;
+  c *= 0.25;
+  float l = dot(c, vec3(0.333));
+  float w = smoothstep(u_threshold, u_threshold + 1.5, l);
+  frag = vec4(c * w, 1.0);
+}
+</script>
+
+<script id="fragBlur" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_tex;
+uniform vec2 u_dir;      // texel offset direction in target pixels
+uniform vec2 u_size;     // target size in pixels
+out vec4 frag;
+void main() {
+  vec2 uv = gl_FragCoord.xy;
+  vec3 sum = vec3(0.0);
+  float wsum = 0.0;
+  for (int i = -4; i <= 4; i++) {
+    float w = exp(-float(i * i) / 4.0);
+    vec3 c = texture(u_tex, (uv + u_dir * float(i)) / u_size).rgb;
+    sum += c * w;
+    wsum += w;
+  }
+  frag = vec4(sum / wsum, 1.0);
+}
+</script>
+
+<script id="fragComposite" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+uniform sampler2D u_scene;
+uniform sampler2D u_bloom;
+uniform float u_exposure;
+uniform float u_bloomStrength;
+uniform float u_ca;
+uniform float u_time;
+uniform vec2 u_res;
+out vec4 frag;
+
+vec3 aces(vec3 x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_res;
+  vec2 c = uv - 0.5;
+  float r2 = dot(c, c);
+  float ca = u_ca * (0.00025 + r2 * 0.0035);
+  vec2 off = c * ca;
+
+  vec3 col;
+  col.r = texture(u_scene, uv - off).r;
+  col.g = texture(u_scene, uv).g;
+  col.b = texture(u_scene, uv + off).b;
+
+  vec3 bloom = texture(u_bloom, uv).rgb * u_bloomStrength;
+  col += bloom;
+  col *= u_exposure;
+  col = aces(col);
+  col = pow(col, vec3(1.0 / 2.2));
+
+  float vig = 1.0 - 0.34 * r2;
+  col *= vig;
+
+  float grain = hash13(vec3(gl_FragCoord.xy, mod(u_time * 60.0, 1000.0)));
+  col += (grain - 0.5) * 0.006;
+
+  frag = vec4(max(col, 0.0), 1.0);
+}
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   Kerr–Newman black hole raymarcher — single file WebGL2 implementation
+   ===================================================================== */
+
+const canvas = document.getElementById('glcanvas');
+const errorDiv = document.getElementById('error');
+
+function showError(msg) {
+  errorDiv.style.display = 'flex';
+  errorDiv.textContent = '初始化失败：' + msg;
+}
+
+const gl = canvas.getContext('webgl2', {
+  antialias: false,
+  depth: false,
+  stencil: false,
+  alpha: false,
+  powerPreference: 'high-performance'
+});
+
+if (!gl) {
+  showError('需要 WebGL2 支持（请使用较新的浏览器，并开启硬件加速）。');
+  throw new Error('WebGL2 unavailable');
+}
+
+const extColorFloat = gl.getExtension('EXT_color_buffer_float');
+const isFloat = !!extColorFloat;
+if (!isFloat) console.warn('EXT_color_buffer_float 不可用，回退到 RGBA8（动态范围降低）。');
+
+const INTERNAL = isFloat ? gl.RGBA16F : gl.RGBA8;
+const TEX_TYPE = isFloat ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+
+/* ------------------------ parameters ------------------------ */
+
+const defaultParams = {
+  a:            { value: 0.80,  min: 0.0,   max: 1.99, step: 0.001, label: '自旋 a*' },
+  Q:            { value: 0.00,  min: 0.0,   max: 1.99, step: 0.001, label: '电荷 Q*' },
+  camDist:      { value: 9.0,   min: 2.30,  max: 30.0, step: 0.05,  label: '相机距离 r/M' },
+  fov:          { value: 55.0,  min: 30.0,  max: 95.0, step: 0.5,   label: '视场角 FOV°' },
+  exposure:     { value: 1.0,   min: 0.05,  max: 5.0,  step: 0.01,  label: '曝光' },
+  bloomStrength:{ value: 1.0,   min: 0.0,   max: 3.0,  step: 0.01,  label: '泛光强度' },
+  bloomThreshold:{value: 1.0,   min: 0.0,   max: 5.0,  step: 0.01,  label: '泛光阈值' },
+  ca:           { value: 0.9,   min: 0.0,   max: 3.0,  step: 0.01,  label: '色散强度' },
+  renderScale:  { value: 0.85,  min: 0.35,  max: 1.0,  step: 0.01,  label: '渲染分辨率' },
+  maxSteps:     { value: 4200,  min: 600,   max: 9000, step: 100,   label: '最大积分步数' },
+  volStep:      { value: 0.07,  min: 0.02,  max: 0.30, step: 0.005, label: '体积步长' },
+  density:      { value: 1.0,   min: 0.0,   max: 6.0,  step: 0.01,  label: '盘密度' },
+  diskTemp:     { value: 8500,  min: 2500,  max: 30000, step: 50,   label: '盘温度 K' },
+  tempFall:     { value: 5.0,   min: 0.5,   max: 20.0, step: 0.1,   label: '温度指数衰减' },
+  diskIn:       { value: 2.8,   min: 1.0,   max: 10.0, step: 0.05,  label: '盘内半径' },
+  diskInSoft:   { value: 0.35,  min: 0.05,  max: 3.0,  step: 0.01,  label: '内缘平滑度' },
+  diskOut:      { value: 17.0,  min: 4.0,   max: 40.0, step: 0.1,   label: '盘外半径' },
+  diskOutSoft:  { value: 4.5,   min: 0.5,   max: 15.0, step: 0.1,   label: '外缘平滑度' },
+  diskFall:     { value: 10.0,  min: 1.0,   max: 30.0, step: 0.1,   label: '径向指数衰减' },
+  diskH:        { value: 0.30,  min: 0.02,  max: 2.0,  step: 0.01,  label: '盘标高' },
+  diskHExp:     { value: 1.0,   min: 0.0,   max: 2.0,  step: 0.01,  label: '盘标高指数' },
+  diskTurb:     { value: 0.85,  min: 0.0,   max: 2.0,  step: 0.01,  label: '湍流强度' },
+  noiseFreq:    { value: 1.4,   min: 0.2,   max: 5.0,  step: 0.01,  label: '噪声频率' },
+  diskFlow:     { value: 0.12,  min: 0.0,   max: 2.0,  step: 0.01,  label: '盘旋转动画' },
+  beaming:      { value: 3.0,   min: 0.0,   max: 5.0,  step: 0.05,  label: '多普勒亮度指数' },
+  extinction:   { value: 0.35,  min: 0.0,   max: 5.0,  step: 0.01,  label: '体积消光' }
+};
+
+const params = {};
+Object.keys(defaultParams).forEach(k => {
+  params[k] = Object.assign({}, defaultParams[k]);
+});
+
+/* camera orbit */
+let camYaw = 0.55, camPitch = 0.22;
+let autoRotate = true;
+let dragging = false;
+
+/* ------------------------ shader compile helpers ------------------------ */
+
+function compileShader(src, type) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(sh);
+    gl.deleteShader(sh);
+    throw new Error('Shader compile error: ' + log);
+  }
+  return sh;
+}
+
+function makeProgram(vsSrc, fsSrc) {
+  const vs = compileShader(vsSrc, gl.VERTEX_SHADER);
+  const fs = compileShader(fsSrc, gl.FRAGMENT_SHADER);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(prog);
+    gl.deleteProgram(prog);
+    throw new Error('Program link error: ' + log);
+  }
+  return prog;
+}
+
+function shaderSource(id) {
+  // trim so the #version directive sits on the very first line
+  return document.getElementById(id).textContent.replace(/^\n+/, '');
+}
+
+function getLoc(prog, name) {
+  return gl.getUniformLocation(prog, name);
+}
+
+/* ------------------------ programs & targets ------------------------ */
+
+let progRay, progBright, progBlur, progComposite;
+let uniRay = {}, uniBright = {}, uniBlur = {}, uniComposite = {};
+let vao;
+
+let sceneW = 1, sceneH = 1, bloomW = 1, bloomH = 1;
+let sceneTarget = null, bloomA = null, bloomB = null;
+
+function initPrograms() {
+  const vs = shaderSource('vertPost');
+  progRay = makeProgram(vs, shaderSource('fragRaymarch'));
+  progBright = makeProgram(vs, shaderSource('fragBright'));
+  progBlur = makeProgram(vs, shaderSource('fragBlur'));
+  progComposite = makeProgram(vs, shaderSource('fragComposite'));
+
+  const rayNames = [
+    'u_res','u_aspect','u_tanF','u_camPos','u_camR','u_camU','u_camF','u_a','u_Q',
+    'u_time','u_maxSteps','u_hMax','u_hMin','u_kP','u_kC','u_kR','u_rFar','u_horizonPT',
+    'u_qCross','u_qMin','u_ringMargin','u_volStep','u_density','u_diskTemp','u_tempFall',
+    'u_diskIn','u_diskInSoft','u_diskOut','u_diskOutSoft','u_diskFall','u_diskH','u_diskHExp',
+    'u_diskTurb','u_noiseFreq','u_diskFlow','u_beaming','u_extinction','u_extColor'
+  ];
+  rayNames.forEach(n => uniRay[n] = getLoc(progRay, n));
+  ['u_tex','u_texel','u_dstSize','u_threshold'].forEach(n => uniBright[n] = getLoc(progBright, n));
+  ['u_tex','u_dir','u_size'].forEach(n => uniBlur[n] = getLoc(progBlur, n));
+  ['u_scene','u_bloom','u_exposure','u_bloomStrength','u_ca','u_time','u_res'].forEach(n => uniComposite[n] = getLoc(progComposite, n));
+
+  vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+}
+
+function createTarget(w, h) {
+  w = Math.max(1, Math.round(w));
+  h = Math.max(1, Math.round(h));
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, INTERNAL, w, h, 0, gl.RGBA, TEX_TYPE, null);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (status !== gl.FRAMEBUFFER_COMPLETE) {
+    throw new Error('Framebuffer incomplete: 0x' + status.toString(16));
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb, w, h };
+}
+
+function destroyTarget(t) {
+  if (!t) return;
+  gl.deleteTexture(t.tex);
+  gl.deleteFramebuffer(t.fb);
+}
+
+function resizeTargets() {
+  if (sceneTarget) destroyTarget(sceneTarget);
+  if (bloomA) destroyTarget(bloomA);
+  if (bloomB) destroyTarget(bloomB);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const bw = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  const bh = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  canvas.width = bw; canvas.height = bh;
+  sceneW = Math.max(1, Math.round(bw * params.renderScale.value));
+  sceneH = Math.max(1, Math.round(bh * params.renderScale.value));
+  bloomW = Math.max(1, Math.round(sceneW * 0.5));
+  bloomH = Math.max(1, Math.round(sceneH * 0.5));
+  sceneTarget = createTarget(sceneW, sceneH);
+  bloomA = createTarget(bloomW, bloomH);
+  bloomB = createTarget(bloomW, bloomH);
+}
+
+/* ------------------------ camera ------------------------ */
+
+function updateCameraBasis() {
+  const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
+  const cy = Math.cos(camYaw), sy = Math.sin(camYaw);
+  const dist = params.camDist.value;
+  const cx = dist * cp * cy, cyy = dist * cp * sy, cz = dist * sp;
+  const F = [-cp * cy, -cp * sy, -sp];
+  const R = [-sy, cy, 0];
+  const U = [R[1] * F[2] - R[2] * F[1], R[2] * F[0] - R[0] * F[2], R[0] * F[1] - R[1] * F[0]];
+  return { pos: [cx, cyy, cz], F, R, U };
+}
+
+/* ------------------------ uniforms ------------------------ */
+
+function uploadRayUniforms() {
+  const cam = updateCameraBasis();
+  gl.useProgram(progRay);
+  gl.uniform2f(uniRay.u_res, sceneW, sceneH);
+  gl.uniform1f(uniRay.u_aspect, sceneW / sceneH);
+  gl.uniform1f(uniRay.u_tanF, Math.tan(params.fov.value * Math.PI / 360.0));
+  gl.uniform3f(uniRay.u_camPos, cam.pos[0], cam.pos[1], cam.pos[2]);
+  gl.uniform3f(uniRay.u_camR, cam.R[0], cam.R[1], cam.R[2]);
+  gl.uniform3f(uniRay.u_camU, cam.U[0], cam.U[1], cam.U[2]);
+  gl.uniform3f(uniRay.u_camF, cam.F[0], cam.F[1], cam.F[2]);
+  gl.uniform1f(uniRay.u_a, params.a.value);
+  gl.uniform1f(uniRay.u_Q, params.Q.value);
+  gl.uniform1f(uniRay.u_time, time);
+  gl.uniform1f(uniRay.u_maxSteps, params.maxSteps.value);
+  // integration accuracy constants
+  gl.uniform1f(uniRay.u_hMax, 0.45);
+  gl.uniform1f(uniRay.u_hMin, 1e-6);
+  gl.uniform1f(uniRay.u_kP, 0.35);
+  gl.uniform1f(uniRay.u_kC, 0.25);
+  gl.uniform1f(uniRay.u_kR, 0.5);
+  gl.uniform1f(uniRay.u_rFar, 100.0);
+  gl.uniform1f(uniRay.u_horizonPT, 1e6);
+  gl.uniform1f(uniRay.u_qCross, 0.2);
+  gl.uniform1f(uniRay.u_qMin, 0.08);
+  gl.uniform1f(uniRay.u_ringMargin, 0.045);
+  gl.uniform1f(uniRay.u_volStep, params.volStep.value);
+  gl.uniform1f(uniRay.u_density, params.density.value);
+  gl.uniform1f(uniRay.u_diskTemp, params.diskTemp.value);
+  gl.uniform1f(uniRay.u_tempFall, params.tempFall.value);
+  gl.uniform1f(uniRay.u_diskIn, params.diskIn.value);
+  gl.uniform1f(uniRay.u_diskInSoft, params.diskInSoft.value);
+  gl.uniform1f(uniRay.u_diskOut, params.diskOut.value);
+  gl.uniform1f(uniRay.u_diskOutSoft, params.diskOutSoft.value);
+  gl.uniform1f(uniRay.u_diskFall, params.diskFall.value);
+  gl.uniform1f(uniRay.u_diskH, params.diskH.value);
+  gl.uniform1f(uniRay.u_diskHExp, params.diskHExp.value);
+  gl.uniform1f(uniRay.u_diskTurb, params.diskTurb.value);
+  gl.uniform1f(uniRay.u_noiseFreq, params.noiseFreq.value);
+  gl.uniform1f(uniRay.u_diskFlow, params.diskFlow.value);
+  gl.uniform1f(uniRay.u_beaming, params.beaming.value);
+  gl.uniform1f(uniRay.u_extinction, params.extinction.value);
+  gl.uniform3f(uniRay.u_extColor, 0.55, 0.80, 1.0);
+}
+
+function drawQuad(target, w, h) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+  gl.viewport(0, 0, w, h);
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ------------------------ render ------------------------ */
+
+let time = 0;
+let lastNow = performance.now();
+let fpsAccum = 0, fpsFrames = 0, fpsLast = performance.now();
+
+function render(now) {
+  const dt = Math.min((now - lastNow) / 1000, 0.1);
+  lastNow = now;
+  time += dt;
+  if (autoRotate && !dragging) camYaw += dt * 0.05;
+
+  // fps
+  fpsAccum += dt; fpsFrames++;
+  if (now - fpsLast > 600) {
+    const fps = fpsFrames / ((now - fpsLast) / 1000);
+    document.getElementById('fps').textContent = fps.toFixed(0) + ' fps · ' +
+      sceneW + '×' + sceneH;
+    fpsAccum = 0; fpsFrames = 0; fpsLast = now;
+  }
+
+  // 1) raymarch scene -> HDR target
+  gl.useProgram(progRay);
+  uploadRayUniforms();
+  drawQuad(sceneTarget, sceneW, sceneH);
+
+  // 2) bright pass -> half-res bloomA (2x2 box downsample)
+  gl.useProgram(progBright);
+  gl.uniform1i(uniBright.u_tex, 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, sceneTarget.tex);
+  gl.uniform2f(uniBright.u_texel, 1.0 / sceneW, 1.0 / sceneH);
+  gl.uniform2f(uniBright.u_dstSize, bloomW, bloomH);
+  gl.uniform1f(uniBright.u_threshold, params.bloomThreshold.value);
+  drawQuad(bloomA, bloomW, bloomH);
+
+  // 3) separable Gaussian blur ping-pong (bloomA <-> bloomB)
+  // 6 passes (H,V,H,V,H,V) starting from bloomA end in bloomA.
+  gl.useProgram(progBlur);
+  gl.uniform1i(uniBlur.u_tex, 0);
+  for (let i = 0; i < 6; i++) {
+    const horizontal = (i % 2 === 0);
+    const src = horizontal ? bloomA : bloomB;
+    const dst = horizontal ? bloomB : bloomA;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
+    gl.viewport(0, 0, bloomW, bloomH);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.uniform2f(uniBlur.u_dir, horizontal ? 1.0 : 0.0, horizontal ? 0.0 : 1.0);
+    gl.uniform2f(uniBlur.u_size, bloomW, bloomH);
+    gl.bindVertexArray(vao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // 4) composite -> screen
+  gl.useProgram(progComposite);
+  gl.uniform1i(uniComposite.u_scene, 0);
+  gl.uniform1i(uniComposite.u_bloom, 1);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, sceneTarget.tex);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+  gl.uniform1f(uniComposite.u_exposure, params.exposure.value);
+  gl.uniform1f(uniComposite.u_bloomStrength, params.bloomStrength.value);
+  gl.uniform1f(uniComposite.u_ca, params.ca.value);
+  gl.uniform1f(uniComposite.u_time, time);
+  gl.uniform2f(uniComposite.u_res, canvas.width, canvas.height);
+  drawQuad(null, canvas.width, canvas.height);
+
+  requestAnimationFrame(render);
+}
+
+/* ------------------------ input ------------------------ */
+
+let pointerState = new Map();
+let pinchDist0 = 0;
+
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointerState.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointerState.size === 2) {
+    const pts = [...pointerState.values()];
+    pinchDist0 = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+  dragging = true;
+  canvas.classList.add('dragging');
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!pointerState.has(e.pointerId)) return;
+  const prev = pointerState.get(e.pointerId);
+  const dx = e.clientX - prev.x;
+  const dy = e.clientY - prev.y;
+  pointerState.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointerState.size === 1) {
+    camYaw += dx * 0.005;
+    camPitch = Math.max(-1.45, Math.min(1.45, camPitch + dy * 0.005));
+  } else if (pointerState.size === 2) {
+    const pts = [...pointerState.values()];
+    const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (pinchDist0 > 0) {
+      const scale = pinchDist0 / Math.max(d, 1e-3);
+      params.camDist.value = Math.max(2.3, Math.min(30.0, params.camDist.value * scale));
+      applyParamUI('camDist');
+    }
+    pinchDist0 = d;
+  }
+});
+
+function endPointer(e) {
+  pointerState.delete(e.pointerId);
+  if (pointerState.size < 2) pinchDist0 = 0;
+  if (pointerState.size === 0) {
+    dragging = false;
+    canvas.classList.remove('dragging');
+  }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = Math.exp(e.deltaY * 0.0011);
+  params.camDist.value = Math.max(2.3, Math.min(30.0, params.camDist.value * f));
+  applyParamUI('camDist');
+}, { passive: false });
+
+/* ------------------------ UI ------------------------ */
+
+function applyParamUI(key) {
+  const el = document.querySelector(`[data-key="${key}"]`);
+  if (el) {
+    el.querySelector('.val').textContent = formatValue(key, params[key].value);
+    el.querySelector('input').value = params[key].value;
+  }
+}
+
+function formatValue(key, v) {
+  if (key === 'a' || key === 'Q') return v.toFixed(3);
+  if (key === 'camDist' || key === 'fov' || key === 'volStep' || key === 'diskIn' || key === 'diskOut' || key === 'diskH') return v.toFixed(2);
+  if (key === 'diskTemp') return Math.round(v).toString() + 'K';
+  if (key === 'maxSteps') return Math.round(v).toString();
+  return v.toFixed(2);
+}
+
+function buildUI() {
+  const groups = [
+    { name: '黑洞参数', keys: ['a', 'Q', 'camDist', 'fov'] },
+    { name: '吸积盘（3D 体积）', keys: ['density', 'diskTemp', 'tempFall', 'diskIn', 'diskInSoft', 'diskOut', 'diskOutSoft', 'diskFall', 'diskH', 'diskHExp', 'diskTurb', 'noiseFreq', 'diskFlow', 'beaming', 'extinction', 'volStep'] },
+    { name: '后处理 / 性能', keys: ['exposure', 'bloomStrength', 'bloomThreshold', 'ca', 'renderScale', 'maxSteps'] }
+  ];
+  const root = document.getElementById('controls');
+  root.innerHTML = '';
+  groups.forEach(g => {
+    const det = document.createElement('details');
+    det.className = 'group';
+    if (g.name !== '吸积盘（3D 体积）') det.open = true;
+    const sum = document.createElement('summary');
+    sum.textContent = g.name;
+    det.appendChild(sum);
+    const body = document.createElement('div');
+    body.className = 'groupBody';
+    g.keys.forEach(key => {
+      const p = params[key];
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.dataset.key = key;
+      row.innerHTML = `<label>${p.label}</label>
+        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.value}">
+        <span class="val">${formatValue(key, p.value)}</span>`;
+      row.querySelector('input').addEventListener('input', e => {
+        params[key].value = parseFloat(e.target.value);
+        row.querySelector('.val').textContent = formatValue(key, params[key].value);
+        if (key === 'renderScale') resizeTargets();
+      });
+      body.appendChild(row);
+    });
+    det.appendChild(body);
+    root.appendChild(det);
+  });
+
+  const autoRow = document.createElement('div');
+  autoRow.className = 'checkRow';
+  autoRow.innerHTML = `<input type="checkbox" id="autoRotate" checked><label for="autoRotate">自动旋转视角</label>`;
+  autoRow.querySelector('input').addEventListener('change', e => autoRotate = e.target.checked);
+  root.appendChild(autoRow);
+}
+
+document.getElementById('collapseBtn').addEventListener('click', () => {
+  const panel = document.getElementById('panel');
+  const collapsed = panel.classList.toggle('collapsed');
+  document.getElementById('collapseBtn').textContent = collapsed ? '展开' : '收起';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  Object.keys(defaultParams).forEach(k => {
+    params[k].value = defaultParams[k].value;
+    const row = document.querySelector(`[data-key="${k}"]`);
+    if (row) {
+      row.querySelector('input').value = params[k].value;
+      row.querySelector('.val').textContent = formatValue(k, params[k].value);
+    }
+  });
+  camYaw = 0.55; camPitch = 0.22;
+  autoRotate = true;
+  document.getElementById('autoRotate').checked = true;
+  resizeTargets();
+});
+
+/* ------------------------ init ------------------------ */
+
+function main() {
+  try {
+    initPrograms();
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    buildUI();
+    resizeTargets();
+    window.addEventListener('resize', resizeTargets);
+    requestAnimationFrame(render);
+  } catch (err) {
+    console.error(err);
+    showError(err.message || String(err));
+  }
+}
+
+main();
+</script>
+</body>
+</html>
